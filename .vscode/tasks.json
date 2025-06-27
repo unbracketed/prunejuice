@@ -4,7 +4,7 @@
     {
       "label": "Run Claude Code Dangerously (Automatically)",
       "type": "shell",
-      "command": "/Users/admin/.claude/local/claude --dangerously-skip-permissions",
+      "command": "claude --dangerously-skip-permissions",
       "presentation": {
         "reveal": "always",
         "panel": "new",
