@@ -45,7 +45,7 @@ show_help() {
     echo ""
     echo "Examples:"
     echo "  $(basename $0)                    # Create worktree with auto-generated branch name"
-    echo "  $(basename $0) fix-bug            # Create worktree with branch tadasant/fix-bug"
+    echo "  $(basename $0) fix-bug            # Create worktree with branch unbracketed/fix-bug"
     echo "  $(basename $0) --mcp dwh fix-bug  # Create worktree and activate dwh MCP template"
     echo "  $(basename $0) -m                 # Interactive MCP template selection"
 }
@@ -186,7 +186,7 @@ if [ -z "$BRANCH_SUFFIX" ]; then
 fi
 
 # Create the full branch name with github username prefix
-BRANCH_NAME="tadasant/$BRANCH_SUFFIX"
+BRANCH_NAME="unbracketed/$BRANCH_SUFFIX"
 
 # Create worktree directory name (replace / with -)
 WORKTREE_DIR=$(echo "$BRANCH_NAME" | tr '/' '-')
@@ -258,7 +258,7 @@ if [ $? -eq 0 ]; then
   fi
   
   echo "Opening in VS Code Insider..."
-  code-insiders "$NEW_WORKTREE_PATH" --new-window
+  code "$NEW_WORKTREE_PATH" --new-window
   
   # If we stashed changes, apply them back on main
   if [ "$STASHED" = true ]; then

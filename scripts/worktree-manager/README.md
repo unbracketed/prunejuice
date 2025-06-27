@@ -78,7 +78,7 @@ WORKTREE_MCP_TEMPLATE_DIR="mcp-json-templates"
 All configuration can be overridden with environment variables:
 
 - `WORKTREE_GITHUB_USERNAME` - GitHub username for branch names
-- `WORKTREE_EDITOR` - Editor command (default: code-insiders)
+- `WORKTREE_EDITOR` - Editor command (default: code)
 - `WORKTREE_DEFAULT_BRANCH` - Default base branch (default: main)
 - `WORKTREE_CONFIG_FILE` - Custom config file location
 - `WORKTREE_PARENT_DIR` - Where to create worktrees (default: ../)

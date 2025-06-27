@@ -2,14 +2,14 @@
 # This file contains default configuration values for the worktree manager
 
 # User settings
-WORKTREE_GITHUB_USERNAME="${WORKTREE_GITHUB_USERNAME:-tadasant}"
+WORKTREE_GITHUB_USERNAME="${WORKTREE_GITHUB_USERNAME:-unbracketed}"
 
 # Git settings
 WORKTREE_DEFAULT_BRANCH="${WORKTREE_DEFAULT_BRANCH:-main}"
 WORKTREE_PARENT_DIR="${WORKTREE_PARENT_DIR:-../}"
 
 # Editor settings
-WORKTREE_EDITOR="${WORKTREE_EDITOR:-code-insiders}"
+WORKTREE_EDITOR="${WORKTREE_EDITOR:-code}"
 WORKTREE_EDITOR_ARGS="${WORKTREE_EDITOR_ARGS:---new-window}"
 
 # Files to copy to new worktrees

@@ -4,7 +4,7 @@
 This document outlines the refactoring plan to transform the current bash script into a more modular, configurable, and maintainable solution.
 
 ## Current Issues
-1. **Hardcoded values** - Username "tadasant", editor "code-insiders", branch "main"
+1. **Hardcoded values** - Username "unbracketed", editor "code", branch "main"
 2. **Monolithic script** - All functionality in a single file
 3. **Limited configurability** - No config file or environment variable support
 4. **Rails-specific assumptions** - Hardcoded Rails credential files
@@ -23,7 +23,7 @@ git:
   worktree_parent: ".git"
   
 editor:
-  command: "code-insiders"
+  command: "code"
   args: "--new-window"
   
 files_to_copy:

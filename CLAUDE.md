@@ -56,7 +56,7 @@ make all
 ### Key Environment Variables
 ```bash
 WORKTREE_GITHUB_USERNAME    # GitHub username for PR operations
-WORKTREE_EDITOR            # Editor command (default: code-insiders)
+WORKTREE_EDITOR            # Editor command (default: code)
 WORKTREE_BASE_DIR          # Base directory for worktrees
 ```
 
