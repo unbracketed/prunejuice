@@ -1,0 +1,9 @@
+Current Worktree Manager Configuration:
+  GitHub Username: unbracketed
+  Default Branch: main
+  Parent Directory: ../
+  Editor: code --new-window
+  MCP Template Dir: mcp-json-templates
+  Files to Copy:
+    - .vscode/tasks.json
+    - mcp-json-templates/.secrets

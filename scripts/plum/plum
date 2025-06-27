@@ -1,0 +1,206 @@
+#!/bin/bash
+
+# Plum - Git Worktree Manager
+# Creates new git worktrees with configurable branch naming and file copying
+
+set -e
+
+# Get the directory of this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="$SCRIPT_DIR/lib"
+
+# Source all library modules
+source "$LIB_DIR/config.sh"
+source "$LIB_DIR/git-utils.sh"
+source "$LIB_DIR/files.sh"
+source "$LIB_DIR/mcp.sh"
+source "$LIB_DIR/ui.sh"
+
+# Initialize configuration
+load_config
+
+# Validate we're in a git repository
+if ! validate_git_repo; then
+    exit 1
+fi
+
+# Get git repository information
+CURRENT_ROOT=$(get_git_root)
+MAIN_WORKTREE=$(get_main_worktree "$CURRENT_ROOT")
+
+# Parse command line arguments
+MCP_TEMPLATE=""
+BRANCH_SUFFIX=""
+BRANCH_PATTERN="{username}/{suffix}"
+BASE_BRANCH="$PLUM_DEFAULT_BRANCH"
+INTERACTIVE_MCP=false
+INTERACTIVE_MODE=false
+DRY_RUN=false
+SKIP_FILE_COPY=false
+SHOW_CONFIG=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            show_help "$(basename "$0")"
+            exit 0
+            ;;
+        -m|--mcp)
+            if [ -n "$2" ] && [[ ! "$2" =~ ^- ]]; then
+                MCP_TEMPLATE="$2"
+                shift 2
+            else
+                INTERACTIVE_MCP=true
+                shift
+            fi
+            ;;
+        --pattern)
+            if [ -n "$2" ] && [[ ! "$2" =~ ^- ]]; then
+                BRANCH_PATTERN="$2"
+                shift 2
+            else
+                show_error "--pattern requires a pattern argument"
+                exit 1
+            fi
+            ;;
+        --from)
+            if [ -n "$2" ] && [[ ! "$2" =~ ^- ]]; then
+                BASE_BRANCH="$2"
+                shift 2
+            else
+                show_error "--from requires a branch name"
+                exit 1
+            fi
+            ;;
+        --no-copy-files)
+            SKIP_FILE_COPY=true
+            shift
+            ;;
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        --config)
+            SHOW_CONFIG=true
+            shift
+            ;;
+        -i|--interactive)
+            INTERACTIVE_MODE=true
+            shift
+            ;;
+        -*)
+            show_error "Unknown option: $1"
+            echo "Use -h or --help for usage information"
+            exit 1
+            ;;
+        *)
+            BRANCH_SUFFIX="$1"
+            shift
+            ;;
+    esac
+done
+
+# Show configuration if requested
+if [ "$SHOW_CONFIG" = true ]; then
+    show_config_ui
+    exit 0
+fi
+
+# Handle interactive mode
+if [ "$INTERACTIVE_MODE" = true ]; then
+    if ! interactive_mode; then
+        exit 1
+    fi
+    
+    # Use interactive values
+    BRANCH_SUFFIX="$INTERACTIVE_BRANCH_SUFFIX"
+    BRANCH_PATTERN="$INTERACTIVE_BRANCH_PATTERN"
+    BASE_BRANCH="$INTERACTIVE_BASE_BRANCH"
+    SKIP_FILE_COPY=$( [ "$INTERACTIVE_COPY_FILES" = false ] && echo true || echo false )
+    MCP_TEMPLATE="$INTERACTIVE_MCP_TEMPLATE"
+fi
+
+# Handle interactive MCP selection
+if [ "$INTERACTIVE_MCP" = true ]; then
+    templates_dir=$(get_templates_dir "$MAIN_WORKTREE")
+    MCP_TEMPLATE=$(select_mcp_template "$templates_dir")
+    if [ $? -ne 0 ] || [ -z "$MCP_TEMPLATE" ]; then
+        echo "MCP template selection cancelled or failed"
+        exit 1
+    fi
+fi
+
+# Generate branch suffix if not provided
+if [ -z "$BRANCH_SUFFIX" ]; then
+    BRANCH_SUFFIX="patch-$(date +%s)"
+fi
+
+# Generate branch name and worktree directory
+BRANCH_NAME=$(generate_branch_name "$BRANCH_SUFFIX" "$PLUM_GITHUB_USERNAME" "$BRANCH_PATTERN")
+WORKTREE_DIR=$(generate_worktree_dir "$BRANCH_NAME")
+
+# Calculate paths
+WORKTREES_PARENT="$(dirname "$MAIN_WORKTREE")"
+NEW_WORKTREE_PATH="$WORKTREES_PARENT/$WORKTREE_DIR"
+
+# Validate MCP template if specified
+if [ -n "$MCP_TEMPLATE" ] && ! template_exists "$MCP_TEMPLATE" "$MAIN_WORKTREE"; then
+    show_error "MCP template '$MCP_TEMPLATE' does not exist"
+    exit 1
+fi
+
+# Show dry run information if requested
+if [ "$DRY_RUN" = true ]; then
+    show_dry_run "$BRANCH_NAME" "$NEW_WORKTREE_PATH" "$BASE_BRANCH" "$( [ "$SKIP_FILE_COPY" = false ] && echo true || echo false )" "$MCP_TEMPLATE"
+    exit 0
+fi
+
+# Main execution
+echo "Creating worktree with branch: $BRANCH_NAME"
+
+# Stash any uncommitted changes
+STASHED=false
+if stash_changes "$BRANCH_NAME"; then
+    STASHED=true
+fi
+
+# Prepare base branch
+if ! prepare_base_branch "$BASE_BRANCH"; then
+    show_error "Failed to prepare base branch: $BASE_BRANCH"
+    exit 1
+fi
+
+# Create the worktree
+if ! create_worktree "$NEW_WORKTREE_PATH" "$BRANCH_NAME" "$BASE_BRANCH"; then
+    show_error "Failed to create worktree"
+    exit 1
+fi
+
+# Copy files if not skipped
+if [ "$SKIP_FILE_COPY" = false ]; then
+    copy_files "$CURRENT_ROOT" "$NEW_WORKTREE_PATH" "${PLUM_FILES_TO_COPY[@]}"
+fi
+
+# Activate MCP template if specified
+if [ -n "$MCP_TEMPLATE" ]; then
+    if ! activate_mcp_template "$MCP_TEMPLATE" "$NEW_WORKTREE_PATH" "$MAIN_WORKTREE"; then
+        show_error "Failed to activate MCP template: $MCP_TEMPLATE"
+        # Continue execution, don't exit
+    fi
+fi
+
+# Open in editor
+echo "Opening in editor: $PLUM_EDITOR"
+if [ -n "$PLUM_EDITOR_ARGS" ]; then
+    $PLUM_EDITOR $PLUM_EDITOR_ARGS "$NEW_WORKTREE_PATH" &
+else
+    $PLUM_EDITOR "$NEW_WORKTREE_PATH" &
+fi
+
+# Restore stashed changes if needed
+if [ "$STASHED" = true ]; then
+    restore_stash "$CURRENT_ROOT"
+fi
+
+# Show success message
+show_success "$NEW_WORKTREE_PATH" "$BRANCH_NAME"

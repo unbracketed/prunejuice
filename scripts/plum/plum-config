@@ -1,0 +1,23 @@
+# Plum Configuration
+# This file contains default configuration values for plum
+
+# User settings
+PLUM_GITHUB_USERNAME="${PLUM_GITHUB_USERNAME:-unbracketed}"
+
+# Git settings
+PLUM_DEFAULT_BRANCH="${PLUM_DEFAULT_BRANCH:-main}"
+PLUM_PARENT_DIR="${PLUM_PARENT_DIR:-../}"
+
+# Editor settings
+PLUM_EDITOR="${PLUM_EDITOR:-code}"
+PLUM_EDITOR_ARGS="${PLUM_EDITOR_ARGS:---new-window}"
+
+# Files to copy to new worktrees
+PLUM_FILES_TO_COPY=(
+  ".vscode/tasks.json"
+  "mcp-json-templates/.secrets"
+)
+
+# MCP settings
+PLUM_MCP_TEMPLATE_DIR="${PLUM_MCP_TEMPLATE_DIR:-mcp-json-templates}"
+PLUM_MCP_AUTO_ACTIVATE="${PLUM_MCP_AUTO_ACTIVATE:-false}"
