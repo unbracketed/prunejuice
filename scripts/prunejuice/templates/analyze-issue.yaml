@@ -1,0 +1,23 @@
+name: analyze-issue
+description: Analyze GitHub issue and create implementation plan
+extends: base-command
+arguments:
+  - name: issue_number
+    required: true
+    description: GitHub issue number to analyze
+  - name: create_worktree
+    required: false
+    default: true
+    description: Whether to create a new worktree for the analysis
+environment:
+  GITHUB_ISSUE_ANALYSIS: "true"
+steps:
+  - create-worktree
+  - start-session
+  - fetch-issue-details
+  - gather-context
+  - run-analysis
+  - generate-implementation-plan
+  - store-artifacts
+working_directory: "{{ worktree_path }}"
+timeout: 1800
