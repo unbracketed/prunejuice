@@ -5,9 +5,11 @@
 # Display help message
 show_help() {
     local script_name="${1:-plum}"
+    local subcommand="${2:-}"
     
-    cat << 'EOF'
-Usage: plum [OPTIONS] [branch-suffix]
+    if [ "$subcommand" = "create" ]; then
+        cat << 'EOF'
+Usage: plum create [OPTIONS] [branch-suffix]
 
 Creates a new git worktree with a branch and opens it in your configured editor.
 
@@ -19,11 +21,49 @@ OPTIONS:
   --from BRANCH           Create from branch other than default
   --no-copy-files         Skip copying files to new worktree
   --dry-run               Show what would be done without doing it
-  --config                Show current configuration
   -i, --interactive       Interactive mode with all options
 
 ARGUMENTS:
   branch-suffix          Optional branch name suffix (default: patch-{timestamp})
+
+EXAMPLES:
+  plum create                    # Create worktree with auto-generated branch name
+  plum create fix-bug            # Create worktree with branch {project-name}-fix-bug
+  plum create --mcp dwh fix-bug  # Create worktree and activate dwh MCP template
+  plum create -m                 # Interactive MCP template selection
+  plum create --pattern "feature/{suffix}" new-feature  # Custom branch pattern
+  plum create --from develop hotfix      # Create from develop branch
+  plum create --dry-run experimental     # Preview actions without executing
+
+EOF
+    elif [ "$subcommand" = "list" ]; then
+        cat << 'EOF'
+Usage: plum list [OPTIONS]
+
+Lists all git worktrees in the current repository.
+
+OPTIONS:
+  -h, --help              Show this help message
+  -v, --verbose           Show detailed worktree information
+
+EXAMPLES:
+  plum list                      # List all worktrees
+  plum list -v                   # List worktrees with detailed information
+
+EOF
+    else
+        cat << 'EOF'
+Usage: plum <command> [OPTIONS] [ARGUMENTS]
+
+Git worktree management tool with configurable branch naming and file copying.
+
+COMMANDS:
+  create [branch-suffix]         Create a new git worktree with a branch
+  list                          List all worktrees in the repository
+
+OPTIONS:
+  -h, --help                    Show this help message
+  --config                      Show current configuration
 
 ENVIRONMENT VARIABLES:
   WORKTREE_NAME_PREFIX    Prefix for worktree names (default: auto-detect from project)
@@ -32,15 +72,15 @@ ENVIRONMENT VARIABLES:
   PLUM_CONFIG_FILE       Custom configuration file path
 
 EXAMPLES:
-  plum                    # Create worktree with auto-generated branch name
-  plum fix-bug            # Create worktree with branch {project-name}-fix-bug
-  plum --mcp dwh fix-bug  # Create worktree and activate dwh MCP template
-  plum -m                 # Interactive MCP template selection
-  plum --pattern "feature/{suffix}" new-feature  # Custom branch pattern
-  plum --from develop hotfix      # Create from develop branch
-  plum --dry-run experimental     # Preview actions without executing
+  plum create                    # Create worktree with auto-generated branch name
+  plum create fix-bug            # Create worktree with branch {project-name}-fix-bug
+  plum list                      # List all worktrees
+  plum list -v                   # List worktrees with detailed information
+
+Use 'plum <command> --help' for more information about a specific command.
 
 EOF
+    fi
 }
 
 # Show current configuration

@@ -115,3 +115,14 @@ restore_stash() {
     cd "$original_root" || return 1
     git stash pop
 }
+
+# List all git worktrees with formatted output
+list_worktrees() {
+    local format="${1:-simple}"
+    
+    if [ "$format" = "verbose" ]; then
+        git worktree list -v
+    else
+        git worktree list
+    fi
+}
