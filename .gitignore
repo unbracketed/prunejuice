@@ -1,1 +1,3 @@
 .testdirs
+# PruneJuice artifacts
+.prunejuice/

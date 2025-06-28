@@ -62,8 +62,8 @@ parse_command_yaml() {
     name=$(yq eval '.name' "$yaml_file")
     description=$(yq eval '.description' "$yaml_file")
     
-    echo "NAME=$name"
-    echo "DESCRIPTION=$description"
+    echo "NAME=$(printf '%q' "$name")"
+    echo "DESCRIPTION=$(printf '%q' "$description")"
     
     # Extract arguments if present
     if yq eval 'has("arguments")' "$yaml_file" | grep -q "true"; then
@@ -193,10 +193,11 @@ validate_command_arguments() {
         if [[ "$arg" != "null" ]]; then
             required_args+=("$arg")
         fi
-    done < <(yq eval '.arguments[] | select(. | type == "!!str") // (.name // empty)' "$yaml_file")
+    done < <(yq eval '.arguments[]? | select(. | type == "!!str") // (.name // empty)' "$yaml_file" 2>/dev/null || true)
     
     # Check if all required arguments are provided
-    for req_arg in "${required_args[@]}"; do
+    if [[ ${#required_args[@]} -gt 0 ]]; then
+        for req_arg in "${required_args[@]}"; do
         local found=false
         for provided_arg in "${provided_args[@]}"; do
             if [[ "$provided_arg" == "$req_arg="* ]]; then
@@ -209,7 +210,8 @@ validate_command_arguments() {
             echo "Error: Missing required argument: $req_arg" >&2
             return 1
         fi
-    done
+        done
+    fi
     
     return 0
 }
