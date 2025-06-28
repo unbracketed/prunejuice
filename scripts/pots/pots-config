@@ -1,0 +1,15 @@
+# POTS Configuration
+# This file contains default configuration values for POTS tmux session manager
+
+# Session settings
+POTS_AUTO_START_SESSION="${POTS_AUTO_START_SESSION:-false}"
+POTS_DEFAULT_TASK="${POTS_DEFAULT_TASK:-dev}"
+POTS_SESSION_PREFIX="${POTS_SESSION_PREFIX:-}"
+
+# Tmux settings  
+POTS_TMUX_SESSION_PREFIX="${POTS_TMUX_SESSION_PREFIX:-plum}"
+POTS_AUTO_ATTACH="${POTS_AUTO_ATTACH:-true}"
+
+# Integration settings
+POTS_PLUM_INTEGRATION="${POTS_PLUM_INTEGRATION:-true}"
+POTS_CLEANUP_ON_WORKTREE_REMOVE="${POTS_CLEANUP_ON_WORKTREE_REMOVE:-true}"

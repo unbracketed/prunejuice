@@ -123,8 +123,8 @@ prunejuice               plum (Git worktree manager)
    - Build session logging system
    - Design prompt assembly framework
 
-### Phase 4: Pots Development
-
+`### Phase 4: Pots Development
+`
 **Objectives:**
 - Create tmux session manager
 - Integrate with plum worktree system

@@ -1,0 +1,404 @@
+#!/bin/bash
+
+# POTS - tmux Session Manager for Worktrees
+# Manages tmux sessions integrated with plum worktree manager
+
+set -e
+
+# Get the directory of this script, resolving symlinks
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [ -L "$SCRIPT_PATH" ]; do
+    SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+    SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+    [[ $SCRIPT_PATH != /* ]] && SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_PATH"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+LIB_DIR="$SCRIPT_DIR/lib"
+
+# Source library modules
+source "$LIB_DIR/shared/config.sh"
+source "$LIB_DIR/shared/git-utils.sh"
+source "$LIB_DIR/session-utils.sh"
+source "$LIB_DIR/worktree-sync.sh"
+source "$LIB_DIR/pots-ui.sh"
+
+# Initialize configuration
+load_config
+
+# Load POTS-specific configuration
+# Check multiple locations for pots config
+POTS_CONFIG_FILES=(
+    "$SCRIPT_DIR/pots-config"
+    "$HOME/.pots-config"
+    "$HOME/.config/pots/config"
+)
+
+for config_file in "${POTS_CONFIG_FILES[@]}"; do
+    if [ -f "$config_file" ]; then
+        source "$config_file"
+        break
+    fi
+done
+
+# Validate tmux is available
+if ! validate_tmux_available; then
+    exit 1
+fi
+
+# Command implementations
+
+command_create() {
+    local WORKTREE_PATH=""
+    local TASK="dev"
+    local AUTO_ATTACH=true
+    
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help "$(basename "$0")" "create"
+                exit 0
+                ;;
+            -t|--task)
+                TASK="$2"
+                shift 2
+                ;;
+            --no-attach)
+                AUTO_ATTACH=false
+                shift
+                ;;
+            -*)
+                show_error "Unknown option: $1"
+                echo "Use 'pots create --help' for usage information"
+                exit 1
+                ;;
+            *)
+                if [ -z "$WORKTREE_PATH" ]; then
+                    WORKTREE_PATH="$1"
+                else
+                    show_error "Unexpected argument: $1"
+                    echo "Use 'pots create --help' for usage information"
+                    exit 1
+                fi
+                shift
+                ;;
+        esac
+    done
+    
+    if [ -z "$WORKTREE_PATH" ]; then
+        show_error "Worktree path is required"
+        echo "Use 'pots create --help' for usage information"
+        exit 1
+    fi
+    
+    # Create the session
+    local session_name
+    session_name=$(generate_session_from_worktree "$WORKTREE_PATH" "$TASK")
+    
+    if [ -z "$session_name" ]; then
+        show_error "Failed to generate session name for worktree '$WORKTREE_PATH'"
+        exit 1
+    fi
+    
+    if create_worktree_session "$WORKTREE_PATH" "$TASK"; then
+        show_success "Created session '$session_name' for worktree '$WORKTREE_PATH'"
+        
+        if [ "$AUTO_ATTACH" = true ]; then
+            echo "Attaching to session..."
+            attach_session "$session_name"
+        fi
+    else
+        show_error "Failed to create session for worktree '$WORKTREE_PATH'"
+        exit 1
+    fi
+}
+
+command_list() {
+    local FILTER=""
+    local VERBOSE=false
+    
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help "$(basename "$0")" "list"
+                exit 0
+                ;;
+            -v|--verbose)
+                VERBOSE=true
+                shift
+                ;;
+            -f|--filter)
+                FILTER="$2"
+                shift 2
+                ;;
+            -*)
+                show_error "Unknown option: $1"
+                echo "Use 'pots list --help' for usage information"
+                exit 1
+                ;;
+            *)
+                if [ -z "$FILTER" ]; then
+                    FILTER="$1"
+                else
+                    show_error "Unexpected argument: $1"
+                    echo "Use 'pots list --help' for usage information"
+                    exit 1
+                fi
+                shift
+                ;;
+        esac
+    done
+    
+    local sessions
+    if [ -n "$FILTER" ]; then
+        sessions=$(list_sessions "$FILTER")
+    else
+        sessions=$(list_sessions)
+    fi
+    
+    if [ -z "$sessions" ]; then
+        echo "No tmux sessions found"
+        return 0
+    fi
+    
+    if [ "$VERBOSE" = true ]; then
+        while IFS= read -r session_name; do
+            echo "Session: $session_name"
+            local session_info
+            session_info=$(get_session_info "$session_name")
+            # Print info lines with indentation, skipping the "Session:" line
+            while IFS= read -r info_line; do
+                if [[ "$info_line" != "Session:"* ]]; then
+                    echo "  $info_line"
+                fi
+            done <<< "$session_info"
+            echo
+        done <<< "$sessions"
+    else
+        echo "$sessions"
+    fi
+}
+
+command_attach() {
+    local SESSION_NAME=""
+    
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help "$(basename "$0")" "attach"
+                exit 0
+                ;;
+            -*)
+                show_error "Unknown option: $1"
+                echo "Use 'pots attach --help' for usage information"
+                exit 1
+                ;;
+            *)
+                if [ -z "$SESSION_NAME" ]; then
+                    SESSION_NAME="$1"
+                else
+                    show_error "Unexpected argument: $1"
+                    echo "Use 'pots attach --help' for usage information"
+                    exit 1
+                fi
+                shift
+                ;;
+        esac
+    done
+    
+    if [ -z "$SESSION_NAME" ]; then
+        show_error "Session name is required"
+        echo "Use 'pots attach --help' for usage information"
+        exit 1
+    fi
+    
+    if attach_session "$SESSION_NAME"; then
+        show_success "Attached to session '$SESSION_NAME'"
+    else
+        show_error "Failed to attach to session '$SESSION_NAME'"
+        exit 1
+    fi
+}
+
+command_kill() {
+    local SESSION_NAME=""
+    local CONFIRM=true
+    
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help "$(basename "$0")" "kill"
+                exit 0
+                ;;
+            -f|--force)
+                CONFIRM=false
+                shift
+                ;;
+            -*)
+                show_error "Unknown option: $1"
+                echo "Use 'pots kill --help' for usage information"
+                exit 1
+                ;;
+            *)
+                if [ -z "$SESSION_NAME" ]; then
+                    SESSION_NAME="$1"
+                else
+                    show_error "Unexpected argument: $1"
+                    echo "Use 'pots kill --help' for usage information"
+                    exit 1
+                fi
+                shift
+                ;;
+        esac
+    done
+    
+    if [ -z "$SESSION_NAME" ]; then
+        show_error "Session name is required"
+        echo "Use 'pots kill --help' for usage information"
+        exit 1
+    fi
+    
+    if [ "$CONFIRM" = true ]; then
+        echo "Are you sure you want to kill session '$SESSION_NAME'? (y/N)"
+        read -r response
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            echo "Cancelled"
+            exit 0
+        fi
+    fi
+    
+    if kill_session "$SESSION_NAME"; then
+        show_success "Killed session '$SESSION_NAME'"
+    else
+        show_error "Failed to kill session '$SESSION_NAME'"
+        exit 1
+    fi
+}
+
+command_cleanup() {
+    local PROJECT_FILTER=""
+    local DRY_RUN=false
+    local INTERACTIVE=true
+    
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help "$(basename "$0")" "cleanup"
+                exit 0
+                ;;
+            -p|--project)
+                PROJECT_FILTER="$2"
+                shift 2
+                ;;
+            -n|--dry-run)
+                DRY_RUN=true
+                shift
+                ;;
+            -y|--yes)
+                INTERACTIVE=false
+                shift
+                ;;
+            -*)
+                show_error "Unknown option: $1"
+                echo "Use 'pots cleanup --help' for usage information"
+                exit 1
+                ;;
+            *)
+                show_error "Unexpected argument: $1"
+                echo "Use 'pots cleanup --help' for usage information"
+                exit 1
+                ;;
+        esac
+    done
+    
+    local orphaned_sessions
+    orphaned_sessions=$(find_sessions_without_worktrees)
+    
+    if [ -z "$orphaned_sessions" ]; then
+        echo "No orphaned sessions found"
+        return 0
+    fi
+    
+    echo "Found orphaned sessions:"
+    while IFS= read -r session_name; do
+        if [ -n "$PROJECT_FILTER" ]; then
+            if [[ "$session_name" != "$PROJECT_FILTER"* ]]; then
+                continue
+            fi
+        fi
+        echo "  - $session_name"
+    done <<< "$orphaned_sessions"
+    
+    if [ "$DRY_RUN" = true ]; then
+        echo "(Dry run - no sessions will be killed)"
+        return 0
+    fi
+    
+    if [ "$INTERACTIVE" = true ]; then
+        echo "Kill these orphaned sessions? (y/N)"
+        read -r response
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            echo "Cancelled"
+            exit 0
+        fi
+    fi
+    
+    local killed_count=0
+    while IFS= read -r session_name; do
+        if [ -n "$PROJECT_FILTER" ]; then
+            if [[ "$session_name" != "$PROJECT_FILTER"* ]]; then
+                continue
+            fi
+        fi
+        
+        if kill_session "$session_name" 2>/dev/null; then
+            echo "Killed: $session_name"
+            killed_count=$((killed_count + 1))
+        else
+            show_error "Failed to kill: $session_name"
+        fi
+    done <<< "$orphaned_sessions"
+    
+    show_success "Cleaned up $killed_count orphaned sessions"
+}
+
+# Main command dispatcher
+COMMAND="${1:-}"
+if [ -z "$COMMAND" ]; then
+    show_help "$(basename "$0")"
+    exit 1
+fi
+
+shift
+
+case "$COMMAND" in
+    create)
+        command_create "$@"
+        ;;
+    list)
+        command_list "$@"
+        ;;
+    attach)
+        command_attach "$@"
+        ;;
+    kill)
+        command_kill "$@"
+        ;;
+    cleanup)
+        command_cleanup "$@"
+        ;;
+    -h|--help)
+        show_help "$(basename "$0")"
+        exit 0
+        ;;
+    -*)
+        show_error "Unknown option: $COMMAND"
+        echo "Use -h or --help for usage information"
+        exit 1
+        ;;
+    *)
+        show_error "Unknown command: $COMMAND"
+        echo "Available commands: create, list, attach, kill, cleanup"
+        echo "Use -h or --help for usage information"
+        exit 1
+        ;;
+esac
