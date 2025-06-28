@@ -1,8 +1,0 @@
-name: base-command
-description: Base template for all PruneJuice commands
-timeout: 3600
-environment:
-  PRUNEJUICE_SESSION: "true"
-steps:
-  - setup-environment
-  - validate-prerequisites
