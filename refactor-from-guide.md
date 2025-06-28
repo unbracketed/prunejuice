@@ -185,13 +185,14 @@ prunejuice               plum (Git worktree manager)
      - run-analysis
      - store-artifacts
    ```
+### Phase 6 MCP Server mode
 
-4. **MCP Server Mode**
+1. **MCP Server Mode**
    - Expose SDLC commands as MCP tools
    - Enable Claude Code to call commands directly
    - Implement command result formatting
 
-### Phase 6: Integration & Testing
+### Phase 7: Integration & Testing
 
 **Objectives:**
 - Validate end-to-end workflows
@@ -214,7 +215,7 @@ prunejuice               plum (Git worktree manager)
    - Implement graceful degradation
    - Add comprehensive logging
 
-### Phase 7: Documentation & Migration
+### Phase 8: Documentation & Migration
 
 **Objectives:**
 - Update all documentation
@@ -237,7 +238,7 @@ prunejuice               plum (Git worktree manager)
    - Provide sample project configurations
    - Document best practices
 
-### Phase 8: Automation & Polish
+### Phase 9: Automation & Polish
 
 **Objectives:**
 - Add comprehensive automation
