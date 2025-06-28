@@ -30,7 +30,18 @@ session_name_sanitize() {
     local raw_name="$1"
     
     # Convert to lowercase and replace invalid characters
-    echo "$raw_name" | /usr/bin/tr '[:upper:]' '[:lower:]' | /usr/bin/sed 's/[^a-z0-9-]/-/g' | /usr/bin/sed 's/--*/-/g' | /usr/bin/sed 's/^-//' | /usr/bin/sed 's/-$//'
+    local result
+    result=$(echo "$raw_name" | /usr/bin/tr '[:upper:]' '[:lower:]' | /usr/bin/sed 's/[^a-z0-9-]/-/g')
+    
+    # Collapse multiple consecutive hyphens into single hyphen using while loop
+    while [[ "$result" == *"--"* ]]; do
+        result=$(echo "$result" | /usr/bin/sed 's/--/-/g')
+    done
+    
+    # Remove leading and trailing hyphens
+    result=$(echo "$result" | /usr/bin/sed 's/^-//' | /usr/bin/sed 's/-$//')
+    
+    echo "$result"
 }
 
 # Generate session name from components
@@ -91,7 +102,7 @@ list_sessions() {
     fi
     
     if [ -n "$filter_pattern" ]; then
-        tmux list-sessions -F "#{session_name}" 2>/dev/null | grep "$filter_pattern" || true
+        tmux list-sessions -F "#{session_name}" 2>/dev/null | grep -E "$filter_pattern" || true
     else
         tmux list-sessions -F "#{session_name}" 2>/dev/null || true
     fi
@@ -159,7 +170,7 @@ list_sessions_detailed() {
     local format="#{session_name}:#{session_path}:#{session_created}:#{session_attached}"
     
     if [ -n "$filter_pattern" ]; then
-        tmux list-sessions -F "$format" 2>/dev/null | grep "$filter_pattern" || true
+        tmux list-sessions -F "$format" 2>/dev/null | grep -E "$filter_pattern" || true
     else
         tmux list-sessions -F "$format" 2>/dev/null || true
     fi

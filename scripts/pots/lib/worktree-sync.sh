@@ -168,7 +168,7 @@ find_worktree_sessions() {
     local session_pattern
     session_pattern=$(session_name_sanitize "${project_name}-${worktree_name}")
     
-    list_sessions "^${session_pattern}-\\|^${session_pattern}$"
+    list_sessions "^${session_pattern}-|^${session_pattern}$"
 }
 
 # Check if worktree exists for a session

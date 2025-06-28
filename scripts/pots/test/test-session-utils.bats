@@ -14,6 +14,11 @@ setup() {
 teardown() {
     # Clean up any test sessions
     tmux kill-session -t "$TEST_SESSION" 2>/dev/null || true
+    
+    # Clean up any sessions starting with the test prefix
+    tmux list-sessions -F "#{session_name}" 2>/dev/null | grep "^${TEST_PREFIX}-" | while read -r session; do
+        tmux kill-session -t "$session" 2>/dev/null || true
+    done
 }
 
 @test "validate_tmux_available should succeed when tmux is installed" {
