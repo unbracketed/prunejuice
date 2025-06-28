@@ -78,18 +78,27 @@ create_worktree() {
     git worktree add "$worktree_path" -b "$branch_name" "$base_branch"
 }
 
-# Generate branch name with username prefix
+# Get project name from the main worktree directory
+get_project_name() {
+    local main_worktree="$1"
+    if [ -n "$main_worktree" ]; then
+        basename "$main_worktree"
+    else
+        basename "$(get_main_worktree "$(get_git_root)")"
+    fi
+}
+
+# Generate branch name with prefix
 generate_branch_name() {
     local suffix="$1"
-    local username="${2:-$PLUM_GITHUB_USERNAME}"
-    local pattern="${3:-\{username\}/\{suffix\}}"
+    local prefix="${2:-}"
     
-    # Replace placeholders in pattern using parameter expansion to avoid shell issues
-    local result="$pattern"
-    result="${result//\{username\}/$username}"
-    result="${result//\{suffix\}/$suffix}"
+    # Use prefix if provided, otherwise use project name
+    if [ -z "$prefix" ]; then
+        prefix=$(get_project_name)
+    fi
     
-    echo "$result"
+    echo "$prefix-$suffix"
 }
 
 # Generate worktree directory name (replace / with -)

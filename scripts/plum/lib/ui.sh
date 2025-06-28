@@ -26,14 +26,14 @@ ARGUMENTS:
   branch-suffix          Optional branch name suffix (default: patch-{timestamp})
 
 ENVIRONMENT VARIABLES:
-  PLUM_GITHUB_USERNAME    GitHub username for branch names
+  WORKTREE_NAME_PREFIX    Prefix for worktree names (default: auto-detect from project)
   PLUM_EDITOR            Editor command to use
   PLUM_DEFAULT_BRANCH    Default base branch
   PLUM_CONFIG_FILE       Custom configuration file path
 
 EXAMPLES:
   plum                    # Create worktree with auto-generated branch name
-  plum fix-bug            # Create worktree with branch {username}/fix-bug
+  plum fix-bug            # Create worktree with branch {project-name}-fix-bug
   plum --mcp dwh fix-bug  # Create worktree and activate dwh MCP template
   plum -m                 # Interactive MCP template selection
   plum --pattern "feature/{suffix}" new-feature  # Custom branch pattern
@@ -46,7 +46,7 @@ EOF
 # Show current configuration
 show_config_ui() {
     echo "Current Plum Configuration:"
-    echo "  GitHub Username: $PLUM_GITHUB_USERNAME"
+    echo "  Worktree Name Prefix: ${WORKTREE_NAME_PREFIX:-auto-detect}"
     echo "  Default Branch: $PLUM_DEFAULT_BRANCH"
     echo "  Parent Directory: $PLUM_PARENT_DIR"
     echo "  Editor: $PLUM_EDITOR $PLUM_EDITOR_ARGS"
@@ -107,7 +107,7 @@ interactive_mode() {
     # Summary
     echo
     echo "=== Summary ==="
-    echo "Branch: $(generate_branch_name "$branch_suffix" "$PLUM_GITHUB_USERNAME" "$branch_pattern")"
+    echo "Branch: $(generate_branch_name "$branch_suffix" "$WORKTREE_NAME_PREFIX")"
     echo "Base: $base_branch"
     echo "Copy files: $copy_files"
     echo "MCP template: ${mcp_template:-none}"

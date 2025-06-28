@@ -30,7 +30,7 @@ load_config() {
     fi
     
     # Set defaults for any missing configuration
-    PLUM_GITHUB_USERNAME="${PLUM_GITHUB_USERNAME:-${GITHUB_USERNAME:-unbracketed}}"
+    WORKTREE_NAME_PREFIX="${WORKTREE_NAME_PREFIX:-${PLUM_GITHUB_USERNAME:-${GITHUB_USERNAME:-}}}"
     PLUM_DEFAULT_BRANCH="${PLUM_DEFAULT_BRANCH:-main}"
     PLUM_PARENT_DIR="${PLUM_PARENT_DIR:-../}"
     PLUM_EDITOR="${PLUM_EDITOR:-${VISUAL:-${EDITOR:-code}}}"
@@ -60,7 +60,7 @@ load_config() {
 # Display current configuration
 show_config() {
     echo "Current Plum Configuration:"
-    echo "  GitHub Username: $PLUM_GITHUB_USERNAME"
+    echo "  Worktree Name Prefix: ${WORKTREE_NAME_PREFIX:-auto-detect}"
     echo "  Default Branch: $PLUM_DEFAULT_BRANCH"
     echo "  Parent Directory: $PLUM_PARENT_DIR"
     echo "  Editor: $PLUM_EDITOR $PLUM_EDITOR_ARGS"

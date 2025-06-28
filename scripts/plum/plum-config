@@ -2,7 +2,7 @@
 # This file contains default configuration values for plum
 
 # User settings
-PLUM_GITHUB_USERNAME="${PLUM_GITHUB_USERNAME:-unbracketed}"
+WORKTREE_NAME_PREFIX="${WORKTREE_NAME_PREFIX:-}"
 
 # Git settings
 PLUM_DEFAULT_BRANCH="${PLUM_DEFAULT_BRANCH:-main}"

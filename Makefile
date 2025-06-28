@@ -1,6 +1,6 @@
 # Makefile for prunejuice project
 
-.PHONY: help test-env test-env-clean
+.PHONY: help test-env test-env-clean install uninstall dev-link dev-unlink
 
 # Default target - show help
 help: ## Show this help message
@@ -33,3 +33,33 @@ test-env-clean: ## Clean up all test environments
 	else \
 		echo "No test environments found"; \
 	fi
+
+PREFIX ?= /usr/local
+BINDIR = $(PREFIX)/bin
+PROJECT_ROOT = $(shell pwd)
+
+dev-link: ## Create symlinks to local commands for development
+	@echo "Creating development symlinks..."
+	@sudo mkdir -p /usr/local/bin
+	@sudo ln -sf "$(PROJECT_ROOT)/scripts/prunejuice-cli.sh" /usr/local/bin/prunejuice-cli
+	@sudo ln -sf "$(PROJECT_ROOT)/scripts/prunejuice-cli.sh" /usr/local/bin/prj
+	@sudo ln -sf "$(PROJECT_ROOT)/scripts/plum/plum" /usr/local/bin/plum
+	@echo "Development symlinks created in /usr/local/bin/"
+
+dev-unlink: ## Remove development symlinks
+	@echo "Removing development symlinks..."
+	@sudo rm -f /usr/local/bin/prunejuice-cli /usr/local/bin/prj /usr/local/bin/plum
+	@echo "Development symlinks removed"
+
+install: ## Install commands to system PATH
+	@echo "Installing prunejuice commands to $(BINDIR)..."
+	@mkdir -p $(BINDIR)
+	@install -m 755 scripts/prunejuice-cli.sh $(BINDIR)/prunejuice-cli
+	@ln -sf $(BINDIR)/prunejuice-cli $(BINDIR)/prj
+	@install -m 755 scripts/plum/plum $(BINDIR)/plum
+	@echo "Commands installed to $(BINDIR)"
+
+uninstall: ## Remove installed commands
+	@echo "Removing prunejuice commands from $(BINDIR)..."
+	@rm -f $(BINDIR)/prunejuice-cli $(BINDIR)/prj $(BINDIR)/plum
+	@echo "Commands removed"

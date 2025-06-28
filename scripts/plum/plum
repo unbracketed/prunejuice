@@ -5,8 +5,14 @@
 
 set -e
 
-# Get the directory of this script
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Get the directory of this script, resolving symlinks
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [ -L "$SCRIPT_PATH" ]; do
+    SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+    SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+    [[ $SCRIPT_PATH != /* ]] && SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_PATH"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/lib"
 
 # Source all library modules
@@ -136,7 +142,7 @@ if [ -z "$BRANCH_SUFFIX" ]; then
 fi
 
 # Generate branch name and worktree directory
-BRANCH_NAME=$(generate_branch_name "$BRANCH_SUFFIX" "$PLUM_GITHUB_USERNAME" "$BRANCH_PATTERN")
+BRANCH_NAME=$(generate_branch_name "$BRANCH_SUFFIX" "$WORKTREE_NAME_PREFIX")
 WORKTREE_DIR=$(generate_worktree_dir "$BRANCH_NAME")
 
 # Calculate paths
