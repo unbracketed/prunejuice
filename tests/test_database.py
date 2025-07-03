@@ -217,3 +217,116 @@ def test_foreign_key_constraints(temp_db):
             git_branch="test",
             git_origin_branch="origin/test",
         )
+
+
+def test_get_project_by_path(temp_db):
+    """Test retrieving a project by path."""
+    # Insert a project
+    project_id = temp_db.insert_project(
+        name="Test Project",
+        slug="test-project",
+        path="/path/to/project",
+        worktree_path="/path/to/worktree",
+        git_init_head_ref="refs/heads/main",
+        git_init_branch="main",
+    )
+
+    # Retrieve by path
+    project = temp_db.get_project_by_path("/path/to/project")
+
+    assert project is not None
+    assert project["id"] == project_id
+    assert project["name"] == "Test Project"
+    assert project["slug"] == "test-project"
+    assert project["path"] == "/path/to/project"
+    assert project["worktree_path"] == "/path/to/worktree"
+    assert project["git_init_head_ref"] == "refs/heads/main"
+    assert project["git_init_branch"] == "main"
+    assert project["date_created"] is not None
+
+
+def test_get_project_by_path_not_found(temp_db):
+    """Test retrieving a project by path when it doesn't exist."""
+    project = temp_db.get_project_by_path("/nonexistent/path")
+    assert project is None
+
+
+def test_get_workspaces_by_project_id(temp_db):
+    """Test retrieving workspaces by project ID."""
+    # Insert a project
+    project_id = temp_db.insert_project(
+        name="Test Project",
+        slug="test-project",
+        path="/path/to/project",
+        worktree_path="/path/to/worktree",
+    )
+
+    # Insert multiple workspaces
+    workspace1_id = temp_db.insert_workspace(
+        name="Main Branch",
+        slug="main",
+        project_id=project_id,
+        path="/project/worktree/main",
+        git_branch="main",
+        git_origin_branch="origin/main",
+    )
+
+    workspace2_id = temp_db.insert_workspace(
+        name="Feature Branch",
+        slug="feature",
+        project_id=project_id,
+        path="/project/worktree/feature",
+        git_branch="feature/new-feature",
+        git_origin_branch="origin/feature/new-feature",
+        artifacts_path="/project/artifacts/feature",
+    )
+
+    # Retrieve workspaces
+    workspaces = temp_db.get_workspaces_by_project_id(project_id)
+
+    assert len(workspaces) == 2
+
+    # Check first workspace (should be ordered by date_created)
+    workspace1 = workspaces[0]
+    assert workspace1["id"] == workspace1_id
+    assert workspace1["name"] == "Main Branch"
+    assert workspace1["slug"] == "main"
+    assert workspace1["project_id"] == project_id
+    assert workspace1["path"] == "/project/worktree/main"
+    assert workspace1["git_branch"] == "main"
+    assert workspace1["git_origin_branch"] == "origin/main"
+    assert workspace1["artifacts_path"] is None
+    assert workspace1["date_created"] is not None
+
+    # Check second workspace
+    workspace2 = workspaces[1]
+    assert workspace2["id"] == workspace2_id
+    assert workspace2["name"] == "Feature Branch"
+    assert workspace2["slug"] == "feature"
+    assert workspace2["project_id"] == project_id
+    assert workspace2["path"] == "/project/worktree/feature"
+    assert workspace2["git_branch"] == "feature/new-feature"
+    assert workspace2["git_origin_branch"] == "origin/feature/new-feature"
+    assert workspace2["artifacts_path"] == "/project/artifacts/feature"
+    assert workspace2["date_created"] is not None
+
+
+def test_get_workspaces_by_project_id_empty(temp_db):
+    """Test retrieving workspaces when none exist for a project."""
+    # Insert a project
+    project_id = temp_db.insert_project(
+        name="Test Project",
+        slug="test-project",
+        path="/path/to/project",
+        worktree_path="/path/to/worktree",
+    )
+
+    # Retrieve workspaces (should be empty)
+    workspaces = temp_db.get_workspaces_by_project_id(project_id)
+    assert workspaces == []
+
+
+def test_get_workspaces_by_project_id_nonexistent(temp_db):
+    """Test retrieving workspaces for a nonexistent project."""
+    workspaces = temp_db.get_workspaces_by_project_id(999)
+    assert workspaces == []

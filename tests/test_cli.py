@@ -134,7 +134,7 @@ def test_status_command_no_project(runner, temp_dir):
         # Run status command in empty directory
         result = runner.invoke(app, ["status"])
 
-        assert result.exit_code == 0
+        assert result.exit_code == 1
         assert "❌ No PruneJuice project found in current directory" in result.stdout
         assert "Run 'prunejuice init' to initialize a project" in result.stdout
 
@@ -151,7 +151,7 @@ def test_status_command_with_project(runner, temp_dir):
         os.chdir(temp_dir)
 
         # First initialize a project
-        init_result = runner.invoke(app, ["init"])
+        init_result = runner.invoke(app, ["init", "Test Project"])
         assert init_result.exit_code == 0
 
         # Then check status
@@ -159,8 +159,206 @@ def test_status_command_with_project(runner, temp_dir):
 
         assert result.exit_code == 0
         assert "✅ PruneJuice project found" in result.stdout
-        assert "Project directory:" in result.stdout
-        assert ".prj" in result.stdout
+        assert "Project: Test Project (ID: 1)" in result.stdout
+        assert f"Path: {temp_dir.resolve()}" in result.stdout
+        assert "Slug: test-project" in result.stdout
+        assert "No workspaces found" in result.stdout
+
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_status_command_with_git_project(runner, temp_dir):
+    """Test status command with a Git project that includes workspaces."""
+    import os
+
+    from git import Repo
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Initialize a git repository
+        repo = Repo.init(temp_dir)
+        test_file = temp_dir / "README.md"
+        test_file.write_text("# Test Project")
+        repo.index.add(["README.md"])
+        repo.index.commit("Initial commit")
+
+        # First initialize a project
+        init_result = runner.invoke(app, ["init", "Git Test Project"])
+        assert init_result.exit_code == 0
+
+        # Then check status
+        result = runner.invoke(app, ["status"])
+
+        assert result.exit_code == 0
+        assert "✅ PruneJuice project found" in result.stdout
+        assert "Project: Git Test Project (ID: 1)" in result.stdout
+        assert f"Path: {temp_dir.resolve()}" in result.stdout
+        assert "Slug: git-test-project" in result.stdout
+        assert "Git branch:" in result.stdout
+        assert "Created:" in result.stdout
+        assert "Workspaces (1):" in result.stdout
+        assert "• main (ID: 1)" in result.stdout
+
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_status_command_project_exists_but_not_in_database(runner, temp_dir):
+    """Test status command when .prj directory exists but project is not in database."""
+    import os
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Create .prj directory structure manually without proper database entry
+        prj_dir = temp_dir / ".prj"
+        prj_dir.mkdir()
+        (prj_dir / "actions").mkdir()
+        (prj_dir / "artifacts").mkdir()
+
+        # Create database file but don't initialize it properly
+        from prunejuice.core.database.manager import Database
+
+        db = Database(prj_dir / "prunejuice.db")
+        db.initialize()
+        # Note: We don't insert any project data
+
+        # Run status command
+        result = runner.invoke(app, ["status"])
+
+        assert result.exit_code == 1
+        assert "❌ Project not found in database" in result.stdout
+        assert "The .prj directory exists but no project is registered" in result.stdout
+
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_status_command_returns_project_model(runner, temp_dir):
+    """Test that status command returns a Project model instance."""
+    import os
+
+    from prunejuice.core.models import Project
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Initialize a project
+        init_result = runner.invoke(app, ["init", "Model Test Project"])
+        assert init_result.exit_code == 0
+
+        # Import the CLI function directly to test return value
+        from prunejuice.cli import status
+
+        # Capture the returned project
+        project = status()
+
+        # Verify it's a Project instance with correct data
+        assert isinstance(project, Project)
+        assert project.name == "Model Test Project"
+        assert project.slug == "model-test-project"
+        assert project.path == str(temp_dir.resolve())
+        assert project.id == 1
+
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_status_command_multiple_workspaces(runner, temp_dir):
+    """Test status command displays multiple workspaces correctly."""
+    import os
+    import sqlite3
+
+    from git import Repo
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Initialize a git repository
+        repo = Repo.init(temp_dir)
+        test_file = temp_dir / "README.md"
+        test_file.write_text("# Test Project")
+        repo.index.add(["README.md"])
+        repo.index.commit("Initial commit")
+
+        # Initialize project
+        init_result = runner.invoke(app, ["init", "Multi Workspace Project"])
+        assert init_result.exit_code == 0
+
+        # Manually add additional workspace to database for testing
+        db_path = temp_dir / ".prj" / "prunejuice.db"
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO workspaces
+                (name, slug, project_id, path, git_branch, git_origin_branch, artifacts_path)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "feature-branch",
+                    "feature-branch",
+                    1,
+                    str(temp_dir / "feature"),
+                    "feature/awesome",
+                    "origin/feature/awesome",
+                    str(temp_dir / "artifacts/feature"),
+                ),
+            )
+            conn.commit()
+
+        # Check status
+        result = runner.invoke(app, ["status"])
+
+        assert result.exit_code == 0
+        assert "✅ PruneJuice project found" in result.stdout
+        assert "Project: Multi Workspace Project (ID: 1)" in result.stdout
+        assert "Workspaces (2):" in result.stdout
+        assert "• main (ID: 1)" in result.stdout
+        assert "• feature-branch (ID: 2) - feature/awesome" in result.stdout
+
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_status_command_in_git_subdirectory(runner, temp_dir):
+    """Test status command works from Git repository subdirectory."""
+    import os
+
+    from git import Repo
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Initialize a git repository
+        repo = Repo.init(temp_dir)
+        test_file = temp_dir / "README.md"
+        test_file.write_text("# Test Project")
+        repo.index.add(["README.md"])
+        repo.index.commit("Initial commit")
+
+        # Initialize project from git root
+        init_result = runner.invoke(app, ["init", "Subdir Test Project"])
+        assert init_result.exit_code == 0
+
+        # Create subdirectory and run status from there
+        subdir = temp_dir / "src"
+        subdir.mkdir()
+        os.chdir(subdir)
+
+        # Run status command from subdirectory
+        result = runner.invoke(app, ["status"])
+
+        assert result.exit_code == 0
+        assert "✅ PruneJuice project found" in result.stdout
+        assert "Project: Subdir Test Project (ID: 1)" in result.stdout
+        assert f"Path: {temp_dir.resolve()}" in result.stdout  # Should show git root, not subdir
 
     finally:
         os.chdir(original_cwd)
