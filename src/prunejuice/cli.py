@@ -2,8 +2,10 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from slugify import slugify
 
 from prunejuice.core.database.manager import Database
+from prunejuice.core.git_ops import GitManager
 
 app = typer.Typer()
 
@@ -11,11 +13,18 @@ console = Console()
 
 
 @app.command("init")
-def init():
+def init(name: str = typer.Argument(None, help="Name for the project")):
     """Initialize a new PruneJuice project in the current directory."""
     path = Path.cwd()
 
-    console.print("🧃 Initializing PruneJuice project...", style="bold green")
+    # Determine project name
+    if name is None:
+        # Use the current directory name as default
+        name = path.name
+
+    project_slug = slugify(name)
+
+    console.print(f"🧃 Initializing PruneJuice project: [bold]{name}[/bold]", style="bold green")
 
     # Create project structure
     prj_dir = path / ".prj"
@@ -30,13 +39,48 @@ def init():
         console.print("Database initialized", style="dim")
     except Exception as e:
         console.print(f"Warning: Database initialization failed: {e}", style="yellow")
+        raise typer.Exit(1) from e
 
-    # Gather project info
-    # slugify project name
-    # add options
-    # Need Git interface
-    # db.insert_project()
-    # db.insert_workspace()
+    # Check Git repository status
+    git_manager = GitManager(path)
+    git_init_head_ref = None
+    git_init_branch = None
+
+    if git_manager.is_git_repository():
+        # Initialize the repo property first
+        git_init_branch = git_manager.get_current_branch()
+        git_init_head_ref = git_manager.get_head_commit_sha()
+        console.print(f"Git repository detected (branch: {git_init_branch})", style="dim")
+    else:
+        console.print("No Git repository found", style="dim yellow")
+
+    # Insert project into database
+    try:
+        project_id = db.insert_project(
+            name=name,
+            slug=project_slug,
+            path=str(path),
+            worktree_path=str(path),  # For now, using same path
+            git_init_head_ref=git_init_head_ref,
+            git_init_branch=git_init_branch,
+        )
+        console.print(f"Project '{name}' registered (ID: {project_id})", style="dim")
+
+        # Insert initial workspace (only if git repository exists)
+        if git_init_branch:
+            workspace_id = db.insert_workspace(
+                name="main",
+                slug="main",
+                project_id=project_id,
+                path=str(path),
+                git_branch=git_init_branch,
+                git_origin_branch=f"origin/{git_init_branch}",
+            )
+            console.print(f"Main workspace created (ID: {workspace_id})", style="dim")
+
+    except Exception as e:
+        console.print(f"Error: Failed to register project: {e}", style="red")
+        raise typer.Exit(1) from e
 
     console.print("✅ Project initialized successfully!", style="bold green")
 

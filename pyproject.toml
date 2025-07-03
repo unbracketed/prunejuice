@@ -19,6 +19,7 @@ classifiers = [
 ]
 dependencies = [
     "gitpython>=3.1.44",
+    "python-slugify>=8.0.4",
     "rich>=14.0.0",
     "typer>=0.16.0",
 ]
@@ -27,6 +28,9 @@ dependencies = [
 Homepage = "https://unbracketed.github.io/prunejuice/"
 Repository = "https://github.com/unbracketed/prunejuice"
 Documentation = "https://unbracketed.github.io/prunejuice/"
+
+[project.scripts]
+prunejuice = "prunejuice.cli:app"
 
 [dependency-groups]
 dev = [
@@ -61,6 +65,9 @@ show_error_codes = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = [
+    "ignore::ResourceWarning:configparser",
+]
 
 [tool.ruff]
 target-version = "py39"

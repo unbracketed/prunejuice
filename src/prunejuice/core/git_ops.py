@@ -1,3 +1,4 @@
+import contextlib
 from pathlib import Path
 from typing import Optional
 
@@ -11,6 +12,8 @@ class GitManager:
         """Initialize with project path."""
         self.project_path = project_path
         self._repo: Optional[Repo] = None
+        with contextlib.suppress(RuntimeError):
+            self._repo = self._get_repo()
 
     def _get_repo(self) -> Repo:
         try:
@@ -55,3 +58,9 @@ class GitManager:
             return self._repo.head.commit.hexsha
         except Exception:
             return None
+
+    def close(self):
+        """Close the repository and free resources."""
+        if self._repo is not None:
+            self._repo.close()
+            self._repo = None

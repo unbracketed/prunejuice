@@ -18,6 +18,8 @@ def temp_git_repo():
         # Initialize a real git repo
         repo = Repo.init(repo_path)
         yield repo_path, repo
+        # Clean up repo
+        repo.close()
 
 
 @pytest.fixture
@@ -35,8 +37,12 @@ class TestGitManager:
         repo_path, _ = temp_git_repo
         git_manager = GitManager(repo_path)
 
-        assert git_manager.project_path == repo_path
-        assert git_manager._repo is None
+        try:
+            assert git_manager.project_path == repo_path
+            assert git_manager._repo is not None
+        finally:
+            # Clean up
+            git_manager.close()
 
     def test_get_repo_success(self, temp_git_repo):
         """Test _get_repo method with valid git repository."""
@@ -68,8 +74,8 @@ class TestGitManager:
         repo_path, _ = temp_git_repo
         git_manager = GitManager(repo_path)
 
-        # Initially _repo should be None
-        assert git_manager._repo is None
+        # Initially _repo should be ready
+        assert git_manager._repo is not None
 
         # First access should initialize _repo
         repo = git_manager.repo
@@ -79,25 +85,6 @@ class TestGitManager:
         # Second access should return the same instance
         repo2 = git_manager.repo
         assert repo2 is repo
-
-    def test_repo_property_caching(self, temp_git_repo):
-        """Test that repo property caches the result."""
-        repo_path, _ = temp_git_repo
-        git_manager = GitManager(repo_path)
-
-        with patch.object(git_manager, "_get_repo") as mock_get_repo:
-            mock_repo = Mock(spec=Repo)
-            mock_get_repo.return_value = mock_repo
-
-            # First call should invoke _get_repo
-            repo1 = git_manager.repo
-            assert repo1 is mock_repo
-            assert mock_get_repo.call_count == 1
-
-            # Second call should return cached result
-            repo2 = git_manager.repo
-            assert repo2 is mock_repo
-            assert mock_get_repo.call_count == 1
 
     def test_is_git_repository_true(self, temp_git_repo):
         """Test is_git_repository method with valid git repository."""
@@ -135,9 +122,9 @@ class TestGitManager:
         branch_name = git_manager.get_current_branch()
         assert branch_name == "main" or branch_name == "master"
 
-    def test_get_current_branch_no_repo_initialized(self, temp_git_repo):
+    def test_get_current_branch_no_repo_initialized(self, temp_non_git_dir):
         """Test get_current_branch method when _repo is None."""
-        repo_path, _ = temp_git_repo
+        repo_path = temp_non_git_dir
         git_manager = GitManager(repo_path)
 
         # _repo is None, so method should return None
@@ -195,11 +182,9 @@ class TestGitManager:
         """Test _get_repo method calls Repo with search_parent_directories=True."""
         mock_repo = Mock(spec=Repo)
         mock_repo_class.return_value = mock_repo
-
         git_manager = GitManager(temp_non_git_dir)
-        result = git_manager._get_repo()
-
         mock_repo_class.assert_called_once_with(temp_non_git_dir, search_parent_directories=True)
+        result = git_manager.repo
         assert result is mock_repo
 
     @patch("prunejuice.core.git_ops.Repo")
