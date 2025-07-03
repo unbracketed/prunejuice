@@ -99,3 +99,56 @@ class Database:
             )
             conn.commit()
             return cursor.lastrowid
+
+    def get_project_by_path(self, path: str) -> Optional[dict]:
+        """Lookup project by directory path."""
+        with self.connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT id, name, slug, path, worktree_path, git_init_head_ref, git_init_branch, date_created
+                FROM projects
+                WHERE path = ?
+                """,
+                (path,),
+            )
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "id": row[0],
+                    "name": row[1],
+                    "slug": row[2],
+                    "path": row[3],
+                    "worktree_path": row[4],
+                    "git_init_head_ref": row[5],
+                    "git_init_branch": row[6],
+                    "date_created": row[7],
+                }
+            return None
+
+    def get_workspaces_by_project_id(self, project_id: int) -> list[dict]:
+        """Get all workspaces for a project."""
+        with self.connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT id, name, slug, project_id, path, git_branch, git_origin_branch, artifacts_path, date_created
+                FROM workspaces
+                WHERE project_id = ?
+                ORDER BY date_created
+                """,
+                (project_id,),
+            )
+            rows = cursor.fetchall()
+            return [
+                {
+                    "id": row[0],
+                    "name": row[1],
+                    "slug": row[2],
+                    "project_id": row[3],
+                    "path": row[4],
+                    "git_branch": row[5],
+                    "git_origin_branch": row[6],
+                    "artifacts_path": row[7],
+                    "date_created": row[8],
+                }
+                for row in rows
+            ]

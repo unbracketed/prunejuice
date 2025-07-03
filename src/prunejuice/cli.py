@@ -6,6 +6,7 @@ from slugify import slugify
 
 from prunejuice.core.database.manager import Database
 from prunejuice.core.git_ops import GitManager
+from prunejuice.core.models import Project, Workspace
 
 app = typer.Typer()
 
@@ -91,7 +92,7 @@ def init(name: str = typer.Argument(None, help="Name for the project")):
 
 
 @app.command("status")
-def status():
+def status() -> Project:
     """Show the current status of the PruneJuice project."""
     path = Path.cwd()
 
@@ -104,14 +105,43 @@ def status():
     if not prj_dir.exists():
         console.print("❌ No PruneJuice project found in current directory", style="red")
         console.print("Run 'prunejuice init' to initialize a project", style="dim")
-        return
+        raise typer.Exit(1)
 
     # Use the path to lookup the Project in the `projects` table
-    # db = Database(prj_dir / "prunejuice.db")
-    # db.lookup_project_by_dir
+    db = Database(prj_dir / "prunejuice.db")
+    project_data = db.get_project_by_path(str(project_path))
 
+    if not project_data:
+        console.print("❌ Project not found in database", style="red")
+        console.print("The .prj directory exists but no project is registered", style="dim")
+        raise typer.Exit(1)
+
+    # Create Project instance from database data
+    project = Project(**project_data)
+
+    # Get workspaces for this project
+    workspaces_data = db.get_workspaces_by_project_id(project.id)
+    workspaces = [Workspace(**workspace_data) for workspace_data in workspaces_data]
+
+    # Display project status
     console.print("✅ PruneJuice project found", style="green")
-    console.print(f"Project directory: {prj_dir}", style="dim")
+    console.print(f"Project: [bold]{project.name}[/bold] (ID: {project.id})")
+    console.print(f"Path: {project.path}")
+    console.print(f"Slug: {project.slug}")
+    if project.git_init_branch:
+        console.print(f"Git branch: {project.git_init_branch}")
+    if project.date_created:
+        console.print(f"Created: {project.date_created}")
+
+    # Display workspaces
+    if workspaces:
+        console.print(f"\nWorkspaces ({len(workspaces)}):", style="bold")
+        for workspace in workspaces:
+            console.print(f"  • {workspace.name} (ID: {workspace.id}) - {workspace.git_branch}")
+    else:
+        console.print("\nNo workspaces found", style="dim")
+
+    return project
 
 
 if __name__ == "__main__":
