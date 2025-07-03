@@ -604,6 +604,84 @@ def test_init_command_in_git_subdirectory(runner, temp_dir):
         os.chdir(original_cwd)
 
 
+def test_init_command_creates_workspace_event(runner, temp_dir):
+    """Test that init command creates workspace-created event when initializing with Git."""
+    import os
+    import sqlite3
+
+    from git import Repo
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Initialize a git repository
+        repo = Repo.init(temp_dir)
+        test_file = temp_dir / "README.md"
+        test_file.write_text("# Test Project")
+        repo.index.add(["README.md"])
+        repo.index.commit("Initial commit")
+
+        # Run init command
+        result = runner.invoke(app, ["init", "Event Test Project"])
+
+        # Check command succeeded
+        assert result.exit_code == 0
+
+        # Check that workspace-created event was inserted
+        db_path = temp_dir / ".prj" / "prunejuice.db"
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.execute(
+                """
+                SELECT action, project_id, workspace_id, status
+                FROM event_log
+                WHERE action = 'workspace-created'
+                """
+            )
+            row = cursor.fetchone()
+
+            assert row is not None
+            assert row[0] == "workspace-created"  # action
+            assert row[1] == 1  # project_id
+            assert row[2] == 1  # workspace_id
+            assert row[3] == "success"  # status
+
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_init_command_no_workspace_event_without_git(runner, temp_dir):
+    """Test that init command does NOT create workspace-created event when no Git repository."""
+    import os
+    import sqlite3
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Run init command without git repository
+        result = runner.invoke(app, ["init", "No Git Project"])
+
+        # Check command succeeded
+        assert result.exit_code == 0
+
+        # Check that NO workspace-created event was inserted
+        db_path = temp_dir / ".prj" / "prunejuice.db"
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM event_log
+                WHERE action = 'workspace-created'
+                """
+            )
+            count = cursor.fetchone()[0]
+            assert count == 0  # No workspace-created events should exist
+
+    finally:
+        os.chdir(original_cwd)
+
+
 def test_init_command_special_characters_in_name(runner, temp_dir):
     """Test init command with special characters in project name."""
     import os

@@ -84,6 +84,14 @@ def init(name: str = typer.Argument(None, help="Name for the project")):
             )
             console.print(f"Main workspace created (ID: {workspace_id})", style="dim")
 
+            # Insert event for workspace creation
+            db.insert_event(
+                action="workspace-created",
+                project_id=project_id,
+                workspace_id=workspace_id,
+                status="success",
+            )
+
     except Exception as e:
         console.print(f"Error: Failed to register project: {e}", style="red")
         raise typer.Exit(1) from e
