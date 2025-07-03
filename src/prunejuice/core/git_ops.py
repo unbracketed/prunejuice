@@ -38,6 +38,12 @@ class GitManager:
             return False
         return True
 
+    def get_repository_root(self) -> Path:
+        """Get the root directory of the Git repository."""
+        if self._repo is None:
+            self._repo = self._get_repo()
+        return Path(self._repo.working_dir)
+
     def get_current_branch(self) -> Optional[str]:
         """Get the current branch name."""
         try:

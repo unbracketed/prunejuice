@@ -286,15 +286,19 @@ def test_init_command_default_name_from_directory(runner, temp_dir):
         assert result.exit_code == 0
         assert "🧃 Initializing PruneJuice project: test-project-dir" in result.stdout
 
-        # Check database has project with directory name
+        # Check database has project with directory name and correct worktree path
         db_path = project_dir / ".prj" / "prunejuice.db"
         with sqlite3.connect(db_path) as conn:
-            cursor = conn.execute("SELECT name, slug FROM projects")
+            cursor = conn.execute("SELECT name, slug, path, worktree_path FROM projects")
             row = cursor.fetchone()
 
             assert row is not None
             assert row[0] == "test-project-dir"
             assert row[1] == "test-project-dir"  # Already a valid slug
+            assert Path(row[2]).resolve() == project_dir.resolve()  # Path should be the current directory
+            assert (
+                Path(row[3]).resolve() == (project_dir / ".worktrees").resolve()
+            )  # Worktree path should be project_dir/.worktrees
 
     finally:
         os.chdir(original_cwd)
@@ -326,16 +330,77 @@ def test_init_command_in_git_repository(runner, temp_dir):
         # Check command succeeded
         assert result.exit_code == 0
         assert "Git repository detected" in result.stdout
+        assert "Using Git repository root:" in result.stdout
 
-        # Check database has git information
+        # Check database has git information and correct paths
         db_path = temp_dir / ".prj" / "prunejuice.db"
         with sqlite3.connect(db_path) as conn:
-            cursor = conn.execute("SELECT git_init_head_ref, git_init_branch FROM projects")
+            cursor = conn.execute("SELECT git_init_head_ref, git_init_branch, path, worktree_path FROM projects")
             row = cursor.fetchone()
 
             assert row is not None
             assert row[0] == commit.hexsha
             assert row[1] in ["main", "master"]
+            assert Path(row[2]).resolve() == temp_dir.resolve()  # Project path should be the git root
+            assert (
+                Path(row[3]).resolve() == (temp_dir / ".worktrees").resolve()
+            )  # Worktree path should be project_dir/.worktrees
+
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_init_command_in_git_subdirectory(runner, temp_dir):
+    """Test init command in a subdirectory of a Git repository."""
+    import os
+    import sqlite3
+
+    from git import Repo
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Initialize a git repository
+        repo = Repo.init(temp_dir)
+
+        # Create a file and commit
+        test_file = temp_dir / "README.md"
+        test_file.write_text("# Test Project")
+        repo.index.add(["README.md"])
+        commit = repo.index.commit("Initial commit")
+
+        # Create a subdirectory and run init from there
+        subdir = temp_dir / "subdir"
+        subdir.mkdir()
+        os.chdir(subdir)
+
+        # Run init command from subdirectory
+        result = runner.invoke(app, ["init", "Git Subdir Project"])
+
+        # Check command succeeded
+        assert result.exit_code == 0
+        assert "Git repository detected" in result.stdout
+        assert "Using Git repository root:" in result.stdout
+
+        # Check that .prj directory was created in the Git root, not the subdirectory
+        prj_dir = temp_dir / ".prj"  # Should be in Git root
+        assert prj_dir.exists()
+        assert (subdir / ".prj").exists() is False  # Should NOT be in subdirectory
+
+        # Check database has git information and correct paths
+        db_path = prj_dir / "prunejuice.db"
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.execute("SELECT git_init_head_ref, git_init_branch, path, worktree_path FROM projects")
+            row = cursor.fetchone()
+
+            assert row is not None
+            assert row[0] == commit.hexsha
+            assert row[1] in ["main", "master"]
+            assert Path(row[2]).resolve() == temp_dir.resolve()  # Project path should be the git root, not subdir
+            assert (
+                Path(row[3]).resolve() == (temp_dir / ".worktrees").resolve()
+            )  # Worktree path should be git_root/.worktrees
 
     finally:
         os.chdir(original_cwd)

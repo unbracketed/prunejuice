@@ -15,11 +15,28 @@ console = Console()
 @app.command("init")
 def init(name: str = typer.Argument(None, help="Name for the project")):
     """Initialize a new PruneJuice project in the current directory."""
-    path = Path.cwd()
+    current_path = Path.cwd()
+
+    # Check Git repository status and determine project directory
+    git_manager = GitManager(current_path)
+    git_init_head_ref = None
+    git_init_branch = None
+
+    if git_manager.is_git_repository():
+        # Use Git repository root as project directory
+        path = git_manager.get_repository_root()
+        git_init_branch = git_manager.get_current_branch()
+        git_init_head_ref = git_manager.get_head_commit_sha()
+        console.print(f"Git repository detected (branch: {git_init_branch})", style="dim")
+        console.print(f"Using Git repository root: {path}", style="dim")
+    else:
+        # Use current directory if no Git repository
+        path = current_path
+        console.print("No Git repository found", style="dim yellow")
 
     # Determine project name
     if name is None:
-        # Use the current directory name as default
+        # Use the project directory name as default
         name = path.name
 
     project_slug = slugify(name)
@@ -41,26 +58,14 @@ def init(name: str = typer.Argument(None, help="Name for the project")):
         console.print(f"Warning: Database initialization failed: {e}", style="yellow")
         raise typer.Exit(1) from e
 
-    # Check Git repository status
-    git_manager = GitManager(path)
-    git_init_head_ref = None
-    git_init_branch = None
-
-    if git_manager.is_git_repository():
-        # Initialize the repo property first
-        git_init_branch = git_manager.get_current_branch()
-        git_init_head_ref = git_manager.get_head_commit_sha()
-        console.print(f"Git repository detected (branch: {git_init_branch})", style="dim")
-    else:
-        console.print("No Git repository found", style="dim yellow")
-
     # Insert project into database
     try:
+        worktree_path = path / ".worktrees"
         project_id = db.insert_project(
             name=name,
             slug=project_slug,
             path=str(path),
-            worktree_path=str(path),  # For now, using same path
+            worktree_path=str(worktree_path),
             git_init_head_ref=git_init_head_ref,
             git_init_branch=git_init_branch,
         )
@@ -95,6 +100,10 @@ def status():
         console.print("❌ No PruneJuice project found in current directory", style="red")
         console.print("Run 'prunejuice init' to initialize a project", style="dim")
         return
+
+    # Use the path to lookup the Project in the `projects` table
+    # db = Database(prj_dir / "prunejuice.db")
+    # db.lookup_project_by_dir
 
     console.print("✅ PruneJuice project found", style="green")
     console.print(f"Project directory: {prj_dir}", style="dim")

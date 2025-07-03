@@ -293,3 +293,52 @@ class TestGitManager:
 
         # Should return None when exception occurs
         assert git_manager.get_head_commit_sha() is None
+
+    def test_get_repository_root_success(self, temp_git_repo):
+        """Test get_repository_root method with valid repository."""
+        repo_path, _ = temp_git_repo
+        git_manager = GitManager(repo_path)
+
+        # Get repository root
+        root_path = git_manager.get_repository_root()
+        assert isinstance(root_path, Path)
+        assert root_path == repo_path
+
+    def test_get_repository_root_with_subdirectory(self, temp_git_repo):
+        """Test get_repository_root method when GitManager is initialized from subdirectory."""
+        repo_path, repo = temp_git_repo
+
+        # Create a subdirectory
+        subdir = repo_path / "subdir"
+        subdir.mkdir()
+
+        # Initialize GitManager from subdirectory
+        git_manager = GitManager(subdir)
+
+        # Should still return the repository root, not the subdirectory
+        root_path = git_manager.get_repository_root()
+        assert isinstance(root_path, Path)
+        assert root_path == repo_path
+        assert root_path != subdir
+
+    def test_get_repository_root_lazy_initialization(self, temp_git_repo):
+        """Test get_repository_root method initializes _repo if None."""
+        repo_path, _ = temp_git_repo
+        git_manager = GitManager(repo_path)
+
+        # Clear _repo to simulate lazy initialization
+        git_manager._repo = None
+
+        # get_repository_root should initialize _repo
+        root_path = git_manager.get_repository_root()
+        assert git_manager._repo is not None
+        assert isinstance(root_path, Path)
+        assert root_path == repo_path
+
+    def test_get_repository_root_invalid_repository(self, temp_non_git_dir):
+        """Test get_repository_root method with invalid git repository."""
+        git_manager = GitManager(temp_non_git_dir)
+
+        # Should raise RuntimeError for invalid repository
+        with pytest.raises(RuntimeError, match="Not a git repository"):
+            git_manager.get_repository_root()
