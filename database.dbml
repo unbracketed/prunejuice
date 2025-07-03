@@ -1,0 +1,36 @@
+Table projects {
+  id integer [primary key]
+  name varchar [not null]
+  slug varchar [not null]
+  path varchar [not null]
+  worktree_path varchar [not null]
+  git_init_head_ref varchar
+  git_init_branch varchar
+  date_created timestamp
+}
+
+Table workspaces {
+  id integer [primary key]
+  name varchar [not null]
+  slug varchar [not null]
+  project_id integer [not null]
+  path varchar [not null]
+  git_branch varchar [not null]
+  git_origin_branch varchar [not null]
+  artifacts_path varchar
+  date_created timestamp
+}
+
+Ref: projects.id < workspaces.project_id
+
+Table event_log {
+  id INTEGER [PRIMARY KEY]
+  action varchar [NOT NULL]
+  project_id integer [NOT NULL]
+  workspace_id integer
+  timestamp timestamp
+  status varchar [not null]
+}
+
+Ref: projects.id < event_log.project_id
+Ref: workspaces.id < event_log.workspace_id
