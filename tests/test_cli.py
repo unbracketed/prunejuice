@@ -1,6 +1,7 @@
 """Tests for CLI commands."""
 
 import tempfile
+import warnings
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,14 @@ def temp_dir():
     """Create a temporary directory for testing."""
     with tempfile.TemporaryDirectory() as temp_dir:
         yield Path(temp_dir)
+
+
+@pytest.fixture(autouse=True)
+def suppress_resource_warnings():
+    """Suppress ResourceWarnings for CLI tests due to SQLite finalizer timing."""
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=ResourceWarning)
+        yield
 
 
 def test_init_command_creates_project_structure(runner, temp_dir):
