@@ -31,6 +31,13 @@ def init():
     except Exception as e:
         console.print(f"Warning: Database initialization failed: {e}", style="yellow")
 
+    # Gather project info
+    # slugify project name
+    # add options
+    # Need Git interface
+    # db.insert_project()
+    # db.insert_workspace()
+
     console.print("✅ Project initialized successfully!", style="bold green")
 
 
