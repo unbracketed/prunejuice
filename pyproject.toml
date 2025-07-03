@@ -17,6 +17,10 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
+dependencies = [
+    "rich>=14.0.0",
+    "typer>=0.16.0",
+]
 
 [project.urls]
 Homepage = "https://unbracketed.github.io/prunejuice/"
