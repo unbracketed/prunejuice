@@ -94,7 +94,12 @@ def init(name: str = typer.Argument(None, help="Name for the project")):
 def status():
     """Show the current status of the PruneJuice project."""
     path = Path.cwd()
-    prj_dir = path / ".prj"
+
+    # Check if we're in a Git repository and use its root, otherwise use current directory
+    git_manager = GitManager(path)
+    project_path = git_manager.get_repository_root() if git_manager.is_git_repository() else path
+
+    prj_dir = project_path / ".prj"
 
     if not prj_dir.exists():
         console.print("❌ No PruneJuice project found in current directory", style="red")
