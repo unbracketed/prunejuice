@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Optional, Protocol
 
 from slugify import slugify
@@ -43,7 +44,7 @@ class WorkspaceService:
         self.git = git_interace
         self.project = project
 
-    def create_workspace(self, name, branch_name: Optional[str], base_branch: Optional[str] = None):
+    def create_workspace(self, name, branch_name: Optional[str], base_branch: Optional[str] = None) -> Workspace:
         workspace_slug = slugify(name)
 
         # Create a Git worktree for the Workspace
@@ -52,10 +53,6 @@ class WorkspaceService:
             kwargs.update(base_branch=base_branch)
         new_worktree_path = self.git.create_worktree(self.project.worktree_path, branch_name, **kwargs)
 
-        # run hooks (future) ...
-
-        # new_workspace = Workspace({"name": name, "slug": workspace_slug, "project_id": self.project.id})
-
         new_workspace_id = self.db.insert_workspace(
             name,
             workspace_slug,
@@ -63,7 +60,18 @@ class WorkspaceService:
             new_worktree_path,
             branch_name,
             base_branch or "",
-            self.project.path / ".prj/artifacts" / workspace_slug,
+            Path(self.project.path) / ".prj/artifacts" / workspace_slug,
+        )
+
+        new_workspace = Workspace(
+            id=new_workspace_id,
+            name=name,
+            slug=workspace_slug,
+            project_id=self.project.id,
+            path=str(new_worktree_path),
+            git_branch=branch_name or workspace_slug,
+            git_origin_branch=base_branch or "",
+            artifacts_path=str(Path(self.project.path) / ".prj/artifacts" / workspace_slug),
         )
         self.db.insert_event(
             action="workspace-created",
@@ -71,6 +79,7 @@ class WorkspaceService:
             workspace_id=new_workspace_id,
             status="success",
         )
+        return new_workspace
 
     def list_workspaces(self):
         pass
