@@ -393,6 +393,211 @@ def test_status_command_help(runner):
     assert "Show the current status of the PruneJuice project" in result.stdout
 
 
+def test_create_workspace_command_help(runner):
+    """Test help for create-workspace command."""
+    result = runner.invoke(app, ["create-workspace", "--help"])
+
+    assert result.exit_code == 0
+    assert "Create a new workspace" in result.stdout
+    assert "NAME" in result.stdout
+    assert "Name for the workspace" in result.stdout
+    assert "--branch-name" in result.stdout
+    assert "--base-branch" in result.stdout
+
+
+def test_create_workspace_command_no_project(runner, temp_dir):
+    """Test create-workspace command when no project exists."""
+    import os
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Run create-workspace command in empty directory
+        result = runner.invoke(app, ["create-workspace", "Test Workspace"])
+
+        assert result.exit_code == 1
+        assert "❌ No PruneJuice project found in current directory" in result.stdout
+
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_create_workspace_command_basic(runner, temp_dir, monkeypatch):
+    """Test create-workspace command with basic workspace creation."""
+    import os
+
+    from prunejuice.core.models import Workspace
+    from prunejuice.core.operations import WorkspaceService
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # First initialize a project
+        init_result = runner.invoke(app, ["init", "Test Project"])
+        assert init_result.exit_code == 0
+
+        # Mock WorkspaceService.create_workspace to return a test workspace
+        mock_workspace = Workspace(
+            id=2,
+            name="Test Workspace",
+            slug="test-workspace",
+            project_id=1,
+            path=str(temp_dir / "test-workspace"),
+            git_branch="test-workspace",
+            git_origin_branch="",
+            artifacts_path=str(temp_dir / ".prj/artifacts/test-workspace"),
+        )
+
+        def mock_create_workspace(self, name, branch_name, base_branch):
+            return mock_workspace
+
+        monkeypatch.setattr(WorkspaceService, "create_workspace", mock_create_workspace)
+
+        # Run create-workspace command
+        result = runner.invoke(app, ["create-workspace", "Test Workspace"])
+
+        assert result.exit_code == 0
+        assert "🚀 Creating workspace: Test Workspace" in result.stdout
+        assert "✅ Workspace 'Test Workspace' created successfully!" in result.stdout
+        assert "Branch: test-workspace" in result.stdout
+        assert f"{temp_dir}/test-workspace" in result.stdout
+
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_create_workspace_command_with_branch_name(runner, temp_dir, monkeypatch):
+    """Test create-workspace command with custom branch name."""
+    import os
+
+    from prunejuice.core.models import Workspace
+    from prunejuice.core.operations import WorkspaceService
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Initialize project
+        init_result = runner.invoke(app, ["init", "Test Project"])
+        assert init_result.exit_code == 0
+
+        # Mock workspace with custom branch
+        mock_workspace = Workspace(
+            id=2,
+            name="Feature Work",
+            slug="feature-work",
+            project_id=1,
+            path=str(temp_dir / "feature-work"),
+            git_branch="doing-some-work",
+            git_origin_branch="",
+            artifacts_path=str(temp_dir / ".prj/artifacts/feature-work"),
+        )
+
+        def mock_create_workspace(self, name, branch_name, base_branch):
+            return mock_workspace
+
+        monkeypatch.setattr(WorkspaceService, "create_workspace", mock_create_workspace)
+
+        # Run create-workspace command with branch name
+        result = runner.invoke(app, ["create-workspace", "Feature Work", "--branch-name", "doing-some-work"])
+
+        assert result.exit_code == 0
+        assert "🚀 Creating workspace: Feature Work" in result.stdout
+        assert "✅ Workspace 'Feature Work' created successfully!" in result.stdout
+        assert "Branch: doing-some-work" in result.stdout
+
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_create_workspace_command_with_base_branch(runner, temp_dir, monkeypatch):
+    """Test create-workspace command with base branch."""
+    import os
+
+    from prunejuice.core.models import Workspace
+    from prunejuice.core.operations import WorkspaceService
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Initialize project
+        init_result = runner.invoke(app, ["init", "Test Project"])
+        assert init_result.exit_code == 0
+
+        # Mock workspace with base branch
+        mock_workspace = Workspace(
+            id=2,
+            name="Branch Work",
+            slug="branch-work",
+            project_id=1,
+            path=str(temp_dir / "branch-work"),
+            git_branch="helping-out",
+            git_origin_branch="origin/somebody-elses-work",
+            artifacts_path=str(temp_dir / ".prj/artifacts/branch-work"),
+        )
+
+        def mock_create_workspace(self, name, branch_name, base_branch):
+            return mock_workspace
+
+        monkeypatch.setattr(WorkspaceService, "create_workspace", mock_create_workspace)
+
+        # Run create-workspace command with both branch name and base branch
+        result = runner.invoke(
+            app,
+            [
+                "create-workspace",
+                "Branch Work",
+                "--branch-name",
+                "helping-out",
+                "--base-branch",
+                "origin/somebody-elses-work",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "🚀 Creating workspace: Branch Work" in result.stdout
+        assert "✅ Workspace 'Branch Work' created successfully!" in result.stdout
+        assert "Branch: helping-out" in result.stdout
+        assert "Base branch: origin/somebody-elses-work" in result.stdout
+
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_create_workspace_command_service_error(runner, temp_dir, monkeypatch):
+    """Test create-workspace command handles service errors gracefully."""
+    import os
+
+    from prunejuice.core.operations import WorkspaceService
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Initialize project
+        init_result = runner.invoke(app, ["init", "Test Project"])
+        assert init_result.exit_code == 0
+
+        # Mock WorkspaceService to raise an error
+        def mock_create_workspace(self, name, branch_name, base_branch):
+            raise Exception("Git worktree creation failed")
+
+        monkeypatch.setattr(WorkspaceService, "create_workspace", mock_create_workspace)
+
+        # Run create-workspace command
+        result = runner.invoke(app, ["create-workspace", "Error Workspace"])
+
+        assert result.exit_code == 1
+        assert "🚀 Creating workspace: Error Workspace" in result.stdout
+        assert "❌ Failed to create workspace: Git worktree creation failed" in result.stdout
+
+    finally:
+        os.chdir(original_cwd)
+
+
 def test_database_error_handling(runner, temp_dir, monkeypatch):
     """Test that database errors are handled gracefully."""
     import os

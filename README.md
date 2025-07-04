@@ -71,4 +71,40 @@ For more details, see [here](https://fpgmaas.github.io/cookiecutter-uv/features/
 
 ---
 
+## CLI Usage
+
+### Initialize a Project
+
+```bash
+# Initialize in current directory
+prunejuice init
+
+# Initialize with custom name
+prunejuice init "My Project"
+```
+
+### Check Project Status
+
+```bash
+prunejuice status
+```
+
+### Create Workspaces
+
+```bash
+# Create a workspace with default branch name
+prunejuice create-workspace "A New Workspace"
+
+# Specify custom branch name
+prunejuice create-workspace "A New Workspace" --branch-name doing-some-work
+
+# Specify base branch to branch from
+prunejuice create-workspace "A New Workspace" --base-branch not-main
+
+# Specify both custom branch name and base branch
+prunejuice create-workspace "A New Workspace" --branch-name helping-out --base-branch origin/somebody-elses-work
+```
+
+---
+
 Repository initiated with [fpgmaas/cookiecutter-uv](https://github.com/fpgmaas/cookiecutter-uv).

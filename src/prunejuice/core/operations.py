@@ -1,3 +1,4 @@
+from logging import getLogger
 from pathlib import Path
 from typing import Optional, Protocol
 
@@ -7,60 +8,51 @@ from prunejuice.core.database.manager import Database
 from prunejuice.core.git_ops import GitManager
 from prunejuice.core.models import Project, Workspace
 
-"""
-Use typing.Protocol for service interfaces - more Pythonic than ABCs.
-
-  Key patterns:
-  1. Protocols define contracts without inheritance
-  2. Dependency injection via __init__ parameters
-  3. Feature-based organization (users/service.py vs services/user_service.py)
-  4. Framework DI systems (FastAPI Depends) inject services into endpoints
-
-  Example structure:
-  # Protocol definition
-  class UserServiceProtocol(Protocol):
-      def create_user(self, user_create: UserCreate) -> User: ...
-
-  # Implementation (no inheritance needed)
-  class DatabaseUserService:
-      def __init__(self, db_session: Session):
-          self.db = db_session
-
-      def create_user(self, user_create: UserCreate) -> User:
-          # business logic here
-
-  Testing benefit: Easy to mock services by overriding dependencies.
-"""
+logger = getLogger(__name__)
 
 
 class WorkspaceProtocol(Protocol):
-    def create_workspace(self, name: str) -> Workspace: ...
-    def list_workspaces(self): ...
+    def create_workspace(
+        self, name: str, branch_name: Optional[str], base_branch: Optional[str] = None
+    ) -> Workspace: ...
+    def list_workspaces(self) -> None: ...
 
 
 class WorkspaceService:
-    def __init__(self, db: Database, git_interace: GitManager, project: Project):
+    def __init__(self, db: Database, git_interace: GitManager, project: Project) -> None:
         self.db = db
         self.git = git_interace
         self.project = project
 
-    def create_workspace(self, name, branch_name: Optional[str], base_branch: Optional[str] = None) -> Workspace:
+    def create_workspace(
+        self, name: str, branch_name: Optional[str], base_branch: Optional[str] = None
+    ) -> Optional[Workspace]:
         workspace_slug = slugify(name)
 
         # Create a Git worktree for the Workspace
-        kwargs = {"branch_name": branch_name or workspace_slug}
+        actual_branch_name = branch_name or workspace_slug
+        kwargs = {}
         if base_branch:
-            kwargs.update(base_branch=base_branch)
-        new_worktree_path = self.git.create_worktree(self.project.worktree_path, branch_name, **kwargs)
+            kwargs["base_branch"] = base_branch
+        worktree_result = self.git.create_worktree(Path(self.project.worktree_path), actual_branch_name, **kwargs)
+
+        if worktree_result["status"] != "success":
+            logger.error(worktree_result["message"])
+            return None
+
+        new_worktree_path = worktree_result["output"]
+
+        if self.project.id is None:
+            raise ValueError("Project ID is not set")
 
         new_workspace_id = self.db.insert_workspace(
             name,
             workspace_slug,
             self.project.id,
             new_worktree_path,
-            branch_name,
+            actual_branch_name,
             base_branch or "",
-            Path(self.project.path) / ".prj/artifacts" / workspace_slug,
+            str(Path(self.project.path) / ".prj/artifacts" / workspace_slug),
         )
 
         new_workspace = Workspace(
@@ -69,7 +61,7 @@ class WorkspaceService:
             slug=workspace_slug,
             project_id=self.project.id,
             path=str(new_worktree_path),
-            git_branch=branch_name or workspace_slug,
+            git_branch=actual_branch_name,
             git_origin_branch=base_branch or "",
             artifacts_path=str(Path(self.project.path) / ".prj/artifacts" / workspace_slug),
         )
@@ -81,5 +73,5 @@ class WorkspaceService:
         )
         return new_workspace
 
-    def list_workspaces(self):
+    def list_workspaces(self) -> None:
         pass

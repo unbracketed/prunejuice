@@ -46,6 +46,16 @@ docs-test: ## Test if documentation can be built without warnings or errors
 docs: ## Build and serve the documentation
 	@uv run mkdocs serve
 
+.PHONY: dump-project-db-tables
+dump-project-db-tables: ## Dump all contents from projects, workspaces, and events tables
+	@echo "📊 Dumping database tables..."
+	@echo "=== PROJECTS TABLE ==="
+	@uv run python -c "from pathlib import Path; from prunejuice.core.database.manager import Database; db = Database(Path('.prj/prunejuice.db')); exec('with db.connection() as conn: cursor = conn.cursor(); cursor.execute(\"SELECT * FROM projects\"); rows = cursor.fetchall()\nfor row in rows: print(row)')"
+	@echo "\n=== WORKSPACES TABLE ==="
+	@uv run python -c "from pathlib import Path; from prunejuice.core.database.manager import Database; db = Database(Path('.prj/prunejuice.db')); exec('with db.connection() as conn: cursor = conn.cursor(); cursor.execute(\"SELECT * FROM workspaces\"); rows = cursor.fetchall()\nfor row in rows: print(row)')"
+	@echo "\n=== EVENTS TABLE ==="
+	@uv run python -c "from pathlib import Path; from prunejuice.core.database.manager import Database; db = Database(Path('.prj/prunejuice.db')); exec('with db.connection() as conn: cursor = conn.cursor(); cursor.execute(\"SELECT * FROM event_log\"); rows = cursor.fetchall()\nfor row in rows: print(row)')"
+
 .PHONY: help
 help:
 	@uv run python -c "import re; \

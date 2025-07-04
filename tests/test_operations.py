@@ -22,7 +22,7 @@ def mock_database():
 def mock_git_manager():
     """Mock GitManager instance."""
     git = Mock()
-    git.create_worktree.return_value = Path("/tmp/test_worktree")
+    git.create_worktree.return_value = {"status": "success", "output": "/tmp/test_worktree"}
     return git
 
 
@@ -66,10 +66,10 @@ def test_create_workspace_basic(workspace_service, mock_database, mock_git_manag
         "Test Workspace",
         "test-workspace",
         1,
-        Path("/tmp/test_worktree"),
-        None,
+        "/tmp/test_worktree",
+        "test-workspace",
         "",
-        Path(mock_project.path) / ".prj/artifacts" / "test-workspace",
+        str(Path(mock_project.path) / ".prj/artifacts" / "test-workspace"),
     )
 
     mock_database.insert_event.assert_called_once_with(
@@ -86,9 +86,7 @@ def test_create_workspace_with_custom_branch(workspace_service, mock_database, m
     assert result.git_branch == "feature/new-feature"
 
     # Verify git worktree creation
-    mock_git_manager.create_worktree.assert_called_once_with(
-        "/tmp/test_project_worktrees", "feature/new-feature", branch_name="feature/new-feature"
-    )
+    mock_git_manager.create_worktree.assert_called_once_with(Path("/tmp/test_project_worktrees"), "feature/new-feature")
 
 
 def test_create_workspace_with_base_branch(workspace_service, mock_database, mock_git_manager):
@@ -103,7 +101,7 @@ def test_create_workspace_with_base_branch(workspace_service, mock_database, moc
 
     # Verify git worktree creation with base branch
     mock_git_manager.create_worktree.assert_called_once_with(
-        "/tmp/test_project_worktrees", "feature/new-feature", branch_name="feature/new-feature", base_branch="develop"
+        Path("/tmp/test_project_worktrees"), "feature/new-feature", base_branch="develop"
     )
 
 
@@ -116,6 +114,4 @@ def test_create_workspace_branch_defaults_to_slug(workspace_service, mock_databa
     assert result.git_branch == "my-cool-feature"
 
     # Verify git worktree creation uses slug as branch name
-    mock_git_manager.create_worktree.assert_called_once_with(
-        "/tmp/test_project_worktrees", None, branch_name="my-cool-feature"
-    )
+    mock_git_manager.create_worktree.assert_called_once_with(Path("/tmp/test_project_worktrees"), "my-cool-feature")

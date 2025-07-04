@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Optional
 
 import typer
 from rich.console import Console
@@ -8,6 +9,7 @@ from slugify import slugify
 from prunejuice.core.database.manager import Database
 from prunejuice.core.git_ops import GitManager
 from prunejuice.core.models import Project, Workspace
+from prunejuice.core.operations import WorkspaceService
 
 app = typer.Typer()
 
@@ -221,6 +223,35 @@ def status() -> Project:
     _display_events(db, project, workspaces)
 
     return project
+
+
+@app.command("create-workspace")
+def create_workspace(
+    name: str = typer.Argument(..., help="Name for the workspace"),
+    branch_name: Optional[str] = typer.Option(None, "--branch-name", help="Git branch name for the workspace"),
+    base_branch: Optional[str] = typer.Option(None, "--base-branch", help="Base branch to create the workspace from"),
+) -> None:
+    """Create a new workspace."""
+    project_path = _get_project_path()
+    project, db = _load_project_from_db(project_path)
+
+    git_manager = GitManager(Path(project.path))
+
+    console.print(f"🚀 Creating workspace: [bold]{name}[/bold]", style="bold green")
+
+    try:
+        workspace_service = WorkspaceService(db, git_manager, project)
+        workspace = workspace_service.create_workspace(name, branch_name, base_branch)
+
+        console.print(f"✅ Workspace '{workspace.name}' created successfully!", style="bold green")
+        console.print(f"Branch: {workspace.git_branch}")
+        console.print(f"Path: {workspace.path}")
+        if workspace.git_origin_branch:
+            console.print(f"Base branch: {workspace.git_origin_branch}")
+
+    except Exception as e:
+        console.print(f"❌ Failed to create workspace: {e}", style="red")
+        raise typer.Exit(1) from e
 
 
 if __name__ == "__main__":
