@@ -119,39 +119,41 @@ def test_create_workspace_branch_defaults_to_slug(workspace_service, mock_databa
 
 def test_list_workspaces_success(workspace_service, mock_database, mock_project):
     """Test successful listing of workspaces."""
-    # Arrange
-    mock_workspaces = [
-        Workspace(
-            id=1,
-            name="Workspace 1",
-            slug="workspace-1",
-            project_id=1,
-            path="/tmp/workspace1",
-            git_branch="workspace-1",
-            git_origin_branch="main",
-            artifacts_path="/tmp/artifacts/workspace-1",
-        ),
-        Workspace(
-            id=2,
-            name="Workspace 2",
-            slug="workspace-2",
-            project_id=1,
-            path="/tmp/workspace2",
-            git_branch="feature/workspace-2",
-            git_origin_branch="develop",
-            artifacts_path="/tmp/artifacts/workspace-2",
-        ),
+    # Arrange - mock database returns dictionaries
+    mock_workspaces_data = [
+        {
+            "id": 1,
+            "name": "Workspace 1",
+            "slug": "workspace-1",
+            "project_id": 1,
+            "path": "/tmp/workspace1",
+            "git_branch": "workspace-1",
+            "git_origin_branch": "main",
+            "artifacts_path": "/tmp/artifacts/workspace-1",
+        },
+        {
+            "id": 2,
+            "name": "Workspace 2",
+            "slug": "workspace-2",
+            "project_id": 1,
+            "path": "/tmp/workspace2",
+            "git_branch": "feature/workspace-2",
+            "git_origin_branch": "develop",
+            "artifacts_path": "/tmp/artifacts/workspace-2",
+        },
     ]
-    mock_database.get_workspaces_by_project_id.return_value = mock_workspaces
+    mock_database.get_workspaces_by_project_id.return_value = mock_workspaces_data
 
     # Act
     result = workspace_service.list_workspaces()
 
     # Assert
-    assert result == mock_workspaces
     assert len(result) == 2
+    assert all(isinstance(w, Workspace) for w in result)
     assert result[0].name == "Workspace 1"
     assert result[1].name == "Workspace 2"
+    assert result[0].id == 1
+    assert result[1].id == 2
     mock_database.get_workspaces_by_project_id.assert_called_once_with(mock_project.id)
 
 

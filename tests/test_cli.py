@@ -915,3 +915,141 @@ def test_init_command_special_characters_in_name(runner, temp_dir):
 
     finally:
         os.chdir(original_cwd)
+
+
+def test_list_workspaces_command_help(runner):
+    """Test help for list-workspaces command."""
+    result = runner.invoke(app, ["list-workspaces", "--help"])
+
+    assert result.exit_code == 0
+    assert "List all workspaces in the current project" in result.stdout
+
+
+def test_list_workspaces_command_no_project(runner, temp_dir):
+    """Test list-workspaces command when no project exists."""
+    import os
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Run list-workspaces command in empty directory
+        result = runner.invoke(app, ["list-workspaces"])
+
+        assert result.exit_code == 1
+        assert "❌ No PruneJuice project found in current directory" in result.stdout
+
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_list_workspaces_command_no_workspaces(runner, temp_dir):
+    """Test list-workspaces command when no workspaces exist."""
+    import os
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Initialize project without git (no initial workspace)
+        init_result = runner.invoke(app, ["init", "Test Project"])
+        assert init_result.exit_code == 0
+
+        # Run list-workspaces command
+        result = runner.invoke(app, ["list-workspaces"])
+
+        assert result.exit_code == 0
+        assert "📋 Workspaces for Test Project:" in result.stdout
+        assert "No workspaces found" in result.stdout
+
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_list_workspaces_command_with_workspaces(runner, temp_dir):
+    """Test list-workspaces command with existing workspaces."""
+    import os
+    import sqlite3
+
+    from git import Repo
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Initialize a git repository
+        repo = Repo.init(temp_dir)
+        test_file = temp_dir / "README.md"
+        test_file.write_text("# Test Project")
+        repo.index.add(["README.md"])
+        repo.index.commit("Initial commit")
+
+        # Initialize project (creates main workspace)
+        init_result = runner.invoke(app, ["init", "Multi Workspace Project"])
+        assert init_result.exit_code == 0
+
+        # Manually add additional workspace to database for testing
+        db_path = temp_dir / ".prj" / "prunejuice.db"
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO workspaces
+                (name, slug, project_id, path, git_branch, git_origin_branch, artifacts_path)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "Feature Branch",
+                    "feature-branch",
+                    1,
+                    str(temp_dir / "feature"),
+                    "feature/awesome",
+                    "origin/develop",
+                    str(temp_dir / ".prj/artifacts/feature"),
+                ),
+            )
+            conn.commit()
+
+        # Run list-workspaces command
+        result = runner.invoke(app, ["list-workspaces"])
+
+        assert result.exit_code == 0
+        assert "📋 Workspaces for Multi Workspace Project:" in result.stdout
+        assert "main" in result.stdout
+        assert "Feature" in result.stdout and "Branch" in result.stdout  # May be split across lines in table
+        assert "feature/awe" in result.stdout  # May be truncated in table
+        assert "origin/deve" in result.stdout  # May be truncated in table
+        assert "Total: 2 workspace(s)" in result.stdout
+
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_list_workspaces_command_service_error(runner, temp_dir, monkeypatch):
+    """Test list-workspaces command handles service errors gracefully."""
+    import os
+
+    from prunejuice.core.operations import WorkspaceService
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Initialize project
+        init_result = runner.invoke(app, ["init", "Test Project"])
+        assert init_result.exit_code == 0
+
+        # Mock WorkspaceService to raise an error
+        def mock_list_workspaces(self):
+            raise Exception("Database connection failed")
+
+        monkeypatch.setattr(WorkspaceService, "list_workspaces", mock_list_workspaces)
+
+        # Run list-workspaces command
+        result = runner.invoke(app, ["list-workspaces"])
+
+        assert result.exit_code == 1
+        assert "📋 Workspaces for Test Project:" in result.stdout
+        assert "❌ Failed to list workspaces: Database connection failed" in result.stdout
+
+    finally:
+        os.chdir(original_cwd)

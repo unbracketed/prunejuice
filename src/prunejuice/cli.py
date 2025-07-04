@@ -258,5 +258,50 @@ def create_workspace(
         raise typer.Exit(1) from e
 
 
+@app.command("list-workspaces")
+def list_workspaces() -> None:
+    """List all workspaces in the current project."""
+    project_path = _get_project_path()
+    project, db = _load_project_from_db(project_path)
+
+    git_manager = GitManager(Path(project.path))
+    workspace_service = WorkspaceService(db, git_manager, project)
+
+    console.print(f"📋 Workspaces for [bold]{project.name}[/bold]:", style="bold blue")
+
+    try:
+        workspaces = workspace_service.list_workspaces()
+
+        if not workspaces:
+            console.print("No workspaces found", style="dim")
+            return
+
+        # Create a rich table for workspaces
+        table = Table(show_header=True, header_style="bold magenta")
+        table.add_column("ID", justify="center", style="cyan")
+        table.add_column("Name", style="yellow")
+        table.add_column("Slug", style="green")
+        table.add_column("Git Branch", style="blue")
+        table.add_column("Base Branch", style="dim")
+        table.add_column("Path", style="dim")
+
+        for workspace in workspaces:
+            table.add_row(
+                str(workspace.id),
+                workspace.name,
+                workspace.slug,
+                workspace.git_branch,
+                workspace.git_origin_branch or "—",
+                workspace.path,
+            )
+
+        console.print(table)
+        console.print(f"\n[dim]Total: {len(workspaces)} workspace(s)[/dim]")
+
+    except Exception as e:
+        console.print(f"❌ Failed to list workspaces: {e}", style="red")
+        raise typer.Exit(1) from e
+
+
 if __name__ == "__main__":
     app()

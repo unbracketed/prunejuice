@@ -74,4 +74,7 @@ class WorkspaceService:
         return new_workspace
 
     def list_workspaces(self) -> Optional[list[Workspace]]:
-        return self.db.get_workspaces_by_project_id(self.project.id)
+        workspaces_data = self.db.get_workspaces_by_project_id(self.project.id)
+        if workspaces_data is None:
+            return None
+        return [Workspace(**workspace_data) for workspace_data in workspaces_data]
