@@ -115,3 +115,67 @@ def test_create_workspace_branch_defaults_to_slug(workspace_service, mock_databa
 
     # Verify git worktree creation uses slug as branch name
     mock_git_manager.create_worktree.assert_called_once_with(Path("/tmp/test_project_worktrees"), "my-cool-feature")
+
+
+def test_list_workspaces_success(workspace_service, mock_database, mock_project):
+    """Test successful listing of workspaces."""
+    # Arrange
+    mock_workspaces = [
+        Workspace(
+            id=1,
+            name="Workspace 1",
+            slug="workspace-1",
+            project_id=1,
+            path="/tmp/workspace1",
+            git_branch="workspace-1",
+            git_origin_branch="main",
+            artifacts_path="/tmp/artifacts/workspace-1",
+        ),
+        Workspace(
+            id=2,
+            name="Workspace 2",
+            slug="workspace-2",
+            project_id=1,
+            path="/tmp/workspace2",
+            git_branch="feature/workspace-2",
+            git_origin_branch="develop",
+            artifacts_path="/tmp/artifacts/workspace-2",
+        ),
+    ]
+    mock_database.get_workspaces_by_project_id.return_value = mock_workspaces
+
+    # Act
+    result = workspace_service.list_workspaces()
+
+    # Assert
+    assert result == mock_workspaces
+    assert len(result) == 2
+    assert result[0].name == "Workspace 1"
+    assert result[1].name == "Workspace 2"
+    mock_database.get_workspaces_by_project_id.assert_called_once_with(mock_project.id)
+
+
+def test_list_workspaces_empty_list(workspace_service, mock_database, mock_project):
+    """Test listing workspaces when no workspaces exist."""
+    # Arrange
+    mock_database.get_workspaces_by_project_id.return_value = []
+
+    # Act
+    result = workspace_service.list_workspaces()
+
+    # Assert
+    assert result == []
+    mock_database.get_workspaces_by_project_id.assert_called_once_with(mock_project.id)
+
+
+def test_list_workspaces_returns_none(workspace_service, mock_database, mock_project):
+    """Test listing workspaces when database returns None."""
+    # Arrange
+    mock_database.get_workspaces_by_project_id.return_value = None
+
+    # Act
+    result = workspace_service.list_workspaces()
+
+    # Assert
+    assert result is None
+    mock_database.get_workspaces_by_project_id.assert_called_once_with(mock_project.id)

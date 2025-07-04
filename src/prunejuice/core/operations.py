@@ -15,7 +15,7 @@ class WorkspaceProtocol(Protocol):
     def create_workspace(
         self, name: str, branch_name: Optional[str], base_branch: Optional[str] = None
     ) -> Workspace: ...
-    def list_workspaces(self) -> None: ...
+    def list_workspaces(self) -> Optional[list[Workspace]]: ...
 
 
 class WorkspaceService:
@@ -73,5 +73,5 @@ class WorkspaceService:
         )
         return new_workspace
 
-    def list_workspaces(self) -> None:
-        pass
+    def list_workspaces(self) -> Optional[list[Workspace]]:
+        return self.db.get_workspaces_by_project_id(self.project.id)
