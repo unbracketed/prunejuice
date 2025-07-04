@@ -2,9 +2,13 @@
 
 import logging
 import sqlite3
+from collections.abc import Generator
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
+
+from ..models import Event
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +22,7 @@ class Database:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
     @contextmanager
-    def connection(self):
+    def connection(self) -> Generator[sqlite3.Connection, None, None]:
         """Context manager for database connections."""
         conn = sqlite3.connect(self.db_path)
         conn.execute("PRAGMA foreign_keys = ON")
@@ -27,7 +31,7 @@ class Database:
         finally:
             conn.close()
 
-    def initialize(self):
+    def initialize(self) -> None:
         """Initialize database with schema."""
         schema_path = Path(__file__).parent / "schema.sql"
         with self.connection() as conn:
@@ -41,16 +45,21 @@ class Database:
         project_id: int,
         status: str,
         workspace_id: Optional[int] = None,
+        timestamp: Optional[str] = None,
     ) -> int:
         """Create new event with proper parameter binding."""
+        # Use provided timestamp or current datetime
+        if timestamp is None:
+            timestamp = datetime.now().isoformat()
+
         with self.connection() as conn:
             cursor = conn.execute(
                 """
                 INSERT INTO event_log
-                (action, project_id, workspace_id, status)
-                VALUES (?, ?, ?, ?)
+                (action, project_id, workspace_id, status, timestamp)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (action, project_id, workspace_id, status),
+                (action, project_id, workspace_id, status, timestamp),
             )
             conn.commit()
             return cursor.lastrowid
@@ -150,5 +159,30 @@ class Database:
                     "artifacts_path": row[7],
                     "date_created": row[8],
                 }
+                for row in rows
+            ]
+
+    def get_events_by_project_id(self, project_id: int) -> list[Event]:
+        """Get all events for a project, ordered by timestamp DESC (most recent first)."""
+        with self.connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT id, action, project_id, workspace_id, timestamp, status
+                FROM event_log
+                WHERE project_id = ?
+                ORDER BY timestamp DESC
+                """,
+                (project_id,),
+            )
+            rows = cursor.fetchall()
+            return [
+                Event(
+                    id=row[0],
+                    action=row[1],
+                    project_id=row[2],
+                    workspace_id=row[3],
+                    timestamp=row[4],
+                    status=row[5],
+                )
                 for row in rows
             ]

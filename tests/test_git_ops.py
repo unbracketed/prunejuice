@@ -342,3 +342,256 @@ class TestGitManager:
         # Should raise RuntimeError for invalid repository
         with pytest.raises(RuntimeError, match="Not a git repository"):
             git_manager.get_repository_root()
+
+    def test_create_worktree_success(self, temp_git_repo):
+        """Test create_worktree method with valid parameters."""
+        repo_path, repo = temp_git_repo
+        git_manager = GitManager(repo_path)
+
+        # Create initial commit to establish main branch
+        (repo_path / "test.txt").write_text("test content")
+        repo.index.add(["test.txt"])
+        repo.index.commit("Initial commit")
+
+        # Create worktree directory
+        worktree_dir = repo_path / "worktrees"
+        worktree_dir.mkdir()
+
+        # Create worktree
+        result = git_manager.create_worktree(
+            worktree_dir=worktree_dir, branch_name="feature-branch", base_branch="main"
+        )
+
+        # Verify result
+        expected_path = worktree_dir / "feature-branch"
+        assert result["status"] == "success"
+        assert result["output"] == str(expected_path)
+        assert expected_path.exists()
+        assert expected_path.is_dir()
+
+        # Verify worktree was created in git
+        worktrees = repo.git.worktree("list").split("\n")
+        assert any(str(expected_path) in worktree for worktree in worktrees)
+
+    def test_create_worktree_with_prefix(self, temp_git_repo):
+        """Test create_worktree method with prefix parameter."""
+        repo_path, repo = temp_git_repo
+        git_manager = GitManager(repo_path)
+
+        # Create initial commit to establish main branch
+        (repo_path / "test.txt").write_text("test content")
+        repo.index.add(["test.txt"])
+        repo.index.commit("Initial commit")
+
+        # Create worktree directory
+        worktree_dir = repo_path / "worktrees"
+        worktree_dir.mkdir()
+
+        # Create worktree with prefix
+        result = git_manager.create_worktree(
+            worktree_dir=worktree_dir, branch_name="feature-branch", base_branch="main", prefix="dev"
+        )
+
+        # Verify result
+        expected_path = worktree_dir / "dev-feature-branch"
+        assert result["status"] == "success"
+        assert result["output"] == str(expected_path)
+        assert expected_path.exists()
+        assert expected_path.is_dir()
+
+    def test_create_worktree_nonexistent_base_branch(self, temp_git_repo):
+        """Test create_worktree method with nonexistent base branch."""
+        repo_path, repo = temp_git_repo
+        git_manager = GitManager(repo_path)
+
+        # Create initial commit to establish main branch
+        (repo_path / "test.txt").write_text("test content")
+        repo.index.add(["test.txt"])
+        repo.index.commit("Initial commit")
+
+        # Create worktree directory
+        worktree_dir = repo_path / "worktrees"
+        worktree_dir.mkdir()
+
+        # Try to create worktree with nonexistent base branch
+        result = git_manager.create_worktree(
+            worktree_dir=worktree_dir, branch_name="feature-branch", base_branch="nonexistent"
+        )
+
+        # Should return failed status
+        assert result["status"] == "failed"
+        assert "Base branch 'nonexistent' does not exist" in result["output"]
+
+    def test_create_worktree_creates_directory(self, temp_git_repo):
+        """Test create_worktree method creates worktree directory if it doesn't exist."""
+        repo_path, repo = temp_git_repo
+        git_manager = GitManager(repo_path)
+
+        # Create initial commit to establish main branch
+        (repo_path / "test.txt").write_text("test content")
+        repo.index.add(["test.txt"])
+        repo.index.commit("Initial commit")
+
+        # Create parent worktree directory but not the final path
+        worktree_dir = repo_path / "worktrees"
+        worktree_dir.mkdir()
+
+        # Create worktree
+        result = git_manager.create_worktree(
+            worktree_dir=worktree_dir, branch_name="feature-branch", base_branch="main"
+        )
+
+        # Verify directory was created
+        expected_path = worktree_dir / "feature-branch"
+        assert result["status"] == "success"
+        assert result["output"] == str(expected_path)
+        assert expected_path.exists()
+        assert expected_path.is_dir()
+
+    def test_create_worktree_creates_parent_directories(self, temp_git_repo):
+        """Test create_worktree method creates parent directories if they don't exist."""
+        repo_path, repo = temp_git_repo
+        git_manager = GitManager(repo_path)
+
+        # Create initial commit to establish main branch
+        (repo_path / "test.txt").write_text("test content")
+        repo.index.add(["test.txt"])
+        repo.index.commit("Initial commit")
+
+        # Use nested directory path that doesn't exist
+        worktree_dir = repo_path / "nested" / "worktrees"
+        assert not worktree_dir.exists()
+        assert not worktree_dir.parent.exists()
+
+        # Create worktree - should create nested directories
+        result = git_manager.create_worktree(
+            worktree_dir=worktree_dir, branch_name="feature-branch", base_branch="main"
+        )
+
+        # Verify nested directories were created
+        expected_path = worktree_dir / "feature-branch"
+        assert result["status"] == "success"
+        assert result["output"] == str(expected_path)
+        assert expected_path.exists()
+        assert expected_path.is_dir()
+        assert worktree_dir.exists()
+        assert worktree_dir.parent.exists()
+
+    def test_create_worktree_existing_branch_name(self, temp_git_repo):
+        """Test create_worktree method with existing branch name."""
+        repo_path, repo = temp_git_repo
+        git_manager = GitManager(repo_path)
+
+        # Create initial commit to establish main branch
+        (repo_path / "test.txt").write_text("test content")
+        repo.index.add(["test.txt"])
+        repo.index.commit("Initial commit")
+
+        # Create a branch with the same name
+        repo.create_head("feature-branch")
+
+        # Create worktree directory
+        worktree_dir = repo_path / "worktrees"
+        worktree_dir.mkdir()
+
+        # Try to create worktree with existing branch name
+        result = git_manager.create_worktree(
+            worktree_dir=worktree_dir, branch_name="feature-branch", base_branch="main"
+        )
+
+        # Should return failed status
+        assert result["status"] == "failed"
+        assert "Failed to create worktree" in result["output"]
+
+    def test_create_worktree_master_as_base_branch(self, temp_git_repo):
+        """Test create_worktree method with master as base branch."""
+        repo_path, repo = temp_git_repo
+        git_manager = GitManager(repo_path)
+
+        # Create initial commit and rename main to master
+        (repo_path / "test.txt").write_text("test content")
+        repo.index.add(["test.txt"])
+        repo.index.commit("Initial commit")
+
+        # Rename main to master
+        repo.heads.main.rename("master")
+
+        # Create worktree directory
+        worktree_dir = repo_path / "worktrees"
+        worktree_dir.mkdir()
+
+        # Create worktree using master as base
+        result = git_manager.create_worktree(
+            worktree_dir=worktree_dir, branch_name="feature-branch", base_branch="master"
+        )
+
+        # Verify result
+        expected_path = worktree_dir / "feature-branch"
+        assert result["status"] == "success"
+        assert result["output"] == str(expected_path)
+        assert expected_path.exists()
+        assert expected_path.is_dir()
+
+    @patch("prunejuice.core.git_ops.logger")
+    def test_create_worktree_logging(self, mock_logger, temp_git_repo):
+        """Test create_worktree method logs appropriate messages."""
+        repo_path, repo = temp_git_repo
+        git_manager = GitManager(repo_path)
+
+        # Create initial commit to establish main branch
+        (repo_path / "test.txt").write_text("test content")
+        repo.index.add(["test.txt"])
+        repo.index.commit("Initial commit")
+
+        # Create worktree directory
+        worktree_dir = repo_path / "worktrees"
+        worktree_dir.mkdir()
+
+        # Create worktree
+        git_manager.create_worktree(worktree_dir=worktree_dir, branch_name="feature-branch", base_branch="main")
+
+        # Verify logging calls
+        expected_path = worktree_dir / "feature-branch"
+        mock_logger.info.assert_any_call(f"Creating worktree at {expected_path} with branch feature-branch")
+        mock_logger.info.assert_any_call(f"Successfully created worktree: {expected_path}")
+
+    def test_create_worktree_empty_prefix(self, temp_git_repo):
+        """Test create_worktree method with empty prefix parameter."""
+        repo_path, repo = temp_git_repo
+        git_manager = GitManager(repo_path)
+
+        # Create initial commit to establish main branch
+        (repo_path / "test.txt").write_text("test content")
+        repo.index.add(["test.txt"])
+        repo.index.commit("Initial commit")
+
+        # Create worktree directory
+        worktree_dir = repo_path / "worktrees"
+        worktree_dir.mkdir()
+
+        # Create worktree with empty prefix
+        result = git_manager.create_worktree(
+            worktree_dir=worktree_dir, branch_name="feature-branch", base_branch="main", prefix=""
+        )
+
+        # Verify result (should be same as no prefix)
+        expected_path = worktree_dir / "feature-branch"
+        assert result["status"] == "success"
+        assert result["output"] == str(expected_path)
+        assert expected_path.exists()
+        assert expected_path.is_dir()
+
+    def test_create_worktree_no_repo_initialized(self, temp_non_git_dir):
+        """Test create_worktree method when _repo is None."""
+        git_manager = GitManager(temp_non_git_dir)
+
+        # Create worktree directory
+        worktree_dir = temp_non_git_dir / "worktrees"
+        worktree_dir.mkdir()
+
+        # Should fail because _repo is None
+        create_result = git_manager.create_worktree(
+            worktree_dir=worktree_dir, branch_name="feature-branch", base_branch="main"
+        )
+        assert create_result["status"] == "failed"
+        assert create_result["output"] == "Repository not initialized"

@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from prunejuice.core.database.manager import Database
+from prunejuice.core.models import Event
 
 
 @pytest.fixture
@@ -330,3 +331,112 @@ def test_get_workspaces_by_project_id_nonexistent(temp_db):
     """Test retrieving workspaces for a nonexistent project."""
     workspaces = temp_db.get_workspaces_by_project_id(999)
     assert workspaces == []
+
+
+def test_get_events_by_project_id(temp_db):
+    """Test retrieving events by project ID ordered by timestamp DESC."""
+    # Insert a project
+    project_id = temp_db.insert_project(
+        name="Test Project",
+        slug="test-project",
+        path="/path/to/project",
+        worktree_path="/path/to/worktree",
+    )
+
+    # Insert another project to test filtering
+    other_project_id = temp_db.insert_project(
+        name="Other Project",
+        slug="other-project",
+        path="/path/to/other",
+        worktree_path="/path/to/other/worktree",
+    )
+
+    # Insert a workspace
+    workspace_id = temp_db.insert_workspace(
+        name="Feature Branch",
+        slug="feature",
+        project_id=project_id,
+        path="/project/worktree/feature",
+        git_branch="feature/new",
+        git_origin_branch="origin/feature/new",
+    )
+
+    # Insert events for the test project with explicit timestamps
+    event1_id = temp_db.insert_event(
+        action="init", project_id=project_id, status="completed", timestamp="2024-01-01 10:00:00"
+    )
+
+    event2_id = temp_db.insert_event(
+        action="build",
+        project_id=project_id,
+        workspace_id=workspace_id,
+        status="success",
+        timestamp="2024-01-01 10:00:30",
+    )
+
+    event3_id = temp_db.insert_event(
+        action="test",
+        project_id=project_id,
+        workspace_id=workspace_id,
+        status="failed",
+        timestamp="2024-01-01 10:01:00",
+    )
+
+    # Insert an event for the other project (should not appear in results)
+    temp_db.insert_event(action="deploy", project_id=other_project_id, status="success")
+
+    # Retrieve events
+    events = temp_db.get_events_by_project_id(project_id)
+
+    assert len(events) == 3
+    assert all(isinstance(event, Event) for event in events)
+
+    # Check events are ordered by timestamp DESC (most recent first)
+    # event3 should be first (most recent)
+    assert events[0].id == event3_id
+    assert events[0].action == "test"
+    assert events[0].project_id == project_id
+    assert events[0].workspace_id == workspace_id
+    assert events[0].status == "failed"
+    assert events[0].timestamp is not None
+
+    # event2 should be second
+    assert events[1].id == event2_id
+    assert events[1].action == "build"
+    assert events[1].project_id == project_id
+    assert events[1].workspace_id == workspace_id
+    assert events[1].status == "success"
+    assert events[1].timestamp is not None
+
+    # event1 should be last (oldest)
+    assert events[2].id == event1_id
+    assert events[2].action == "init"
+    assert events[2].project_id == project_id
+    assert events[2].workspace_id is None
+    assert events[2].status == "completed"
+    assert events[2].timestamp is not None
+
+    # Verify timestamps are in descending order
+    for i in range(len(events) - 1):
+        assert events[i].timestamp >= events[i + 1].timestamp
+
+
+def test_get_events_by_project_id_empty(temp_db):
+    """Test retrieving events when none exist for a project."""
+    # Insert a project
+    project_id = temp_db.insert_project(
+        name="Test Project",
+        slug="test-project",
+        path="/path/to/project",
+        worktree_path="/path/to/worktree",
+    )
+
+    # Retrieve events (should be empty)
+    events = temp_db.get_events_by_project_id(project_id)
+    assert events == []
+
+
+def test_get_events_by_project_id_nonexistent(temp_db):
+    """Test retrieving events for a nonexistent project."""
+    events = temp_db.get_events_by_project_id(999)
+    assert events == []

@@ -1,8 +1,11 @@
 import contextlib
+from logging import getLogger
 from pathlib import Path
 from typing import Optional
 
-from git import InvalidGitRepositoryError, NoSuchPathError, Repo
+from git import GitCommandError, InvalidGitRepositoryError, NoSuchPathError, Repo
+
+logger = getLogger(__name__)
 
 
 class GitManager:
@@ -46,6 +49,8 @@ class GitManager:
 
     def get_current_branch(self) -> Optional[str]:
         """Get the current branch name."""
+        if self._repo is None:
+            return None
         try:
             return self._repo.active_branch.name
         except Exception:
@@ -65,8 +70,44 @@ class GitManager:
         except Exception:
             return None
 
-    def close(self):
+    def close(self) -> None:
         """Close the repository and free resources."""
         if self._repo is not None:
             self._repo.close()
             self._repo = None
+
+    def create_worktree(
+        self, worktree_dir: Path, branch_name: str, base_branch: str = "main", prefix: str = ""
+    ) -> dict[str, str]:
+        """Create a new Git worktree.
+
+        Args:
+            worktree_dir: Directory for worktree (default: .worktrees)
+            branch_name: Name for the new branch
+            base_branch: Base branch to create from
+
+        Returns:
+            A dict with keys:
+            status - Indicates success / failure
+            output - worktree path on success, error message on failure
+        """
+        worktree_path = worktree_dir / f"{prefix}-{branch_name}" if prefix else worktree_dir / branch_name
+        worktree_path.mkdir(parents=True, exist_ok=True)
+
+        try:
+            # Check if base branch exists
+            if self._repo is None:
+                return {"status": "failed", "output": "Repository not initialized"}
+
+            if base_branch not in [ref.name for ref in self._repo.refs]:
+                return {"status": "failed", "output": f"Base branch '{base_branch}' does not exist"}
+
+            logger.info(f"Creating worktree at {worktree_path} with branch {branch_name}")
+
+            self._repo.git.worktree("add", "-b", branch_name, str(worktree_path), base_branch)
+
+            logger.info(f"Successfully created worktree: {worktree_path}")
+            return {"status": "success", "output": str(worktree_path)}
+
+        except GitCommandError as e:
+            return {"status": "failed", "output": f"Failed to create worktree: {e}"}
