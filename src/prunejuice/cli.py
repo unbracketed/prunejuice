@@ -243,6 +243,10 @@ def create_workspace(
         workspace_service = WorkspaceService(db, git_manager, project)
         workspace = workspace_service.create_workspace(name, branch_name, base_branch)
 
+        if workspace is None:
+            console.print("❌ Failed to create workspace", style="red")
+            raise typer.Exit(1)
+
         console.print(f"✅ Workspace '{workspace.name}' created successfully!", style="bold green")
         console.print(f"Branch: {workspace.git_branch}")
         console.print(f"Path: {workspace.path}")

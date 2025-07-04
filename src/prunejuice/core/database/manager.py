@@ -62,6 +62,8 @@ class Database:
                 (action, project_id, workspace_id, status, timestamp),
             )
             conn.commit()
+            if cursor.lastrowid is None:
+                raise ValueError("Failed to insert event - no ID returned")
             return cursor.lastrowid
 
     def insert_project(
@@ -84,6 +86,8 @@ class Database:
                 (name, slug, path, worktree_path, git_init_head_ref, git_init_branch),
             )
             conn.commit()
+            if cursor.lastrowid is None:
+                raise ValueError("Failed to insert project - no ID returned")
             return cursor.lastrowid
 
     def insert_workspace(
@@ -107,6 +111,8 @@ class Database:
                 (name, slug, project_id, path, git_branch, git_origin_branch, artifacts_path),
             )
             conn.commit()
+            if cursor.lastrowid is None:
+                raise ValueError("Failed to insert workspace - no ID returned")
             return cursor.lastrowid
 
     def get_project_by_path(self, path: str) -> Optional[dict]:
