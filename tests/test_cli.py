@@ -1001,7 +1001,7 @@ def test_list_workspaces_command_with_workspaces(runner, temp_dir):
                     "Feature Branch",
                     "feature-branch",
                     1,
-                    str(temp_dir / "feature"),
+                    str(temp_dir / ".worktrees" / "feature"),  # Use relative path under project
                     "feature/awesome",
                     "origin/develop",
                     str(temp_dir / ".prj/artifacts/feature"),
@@ -1018,6 +1018,9 @@ def test_list_workspaces_command_with_workspaces(runner, temp_dir):
         assert "Feature" in result.stdout and "Branch" in result.stdout  # May be split across lines in table
         assert "feature/awe" in result.stdout  # May be truncated in table
         assert "origin/deve" in result.stdout  # May be truncated in table
+        assert "⚓ /" in result.stdout  # Main workspace shows as root
+        assert "🌳 /feature" in result.stdout  # Feature workspace shows with tree icon
+        assert "🌳 =" in result.stdout  # Column header includes tree icon (may be wrapped)
         assert "Total: 2 workspace(s)" in result.stdout
 
     finally:

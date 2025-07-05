@@ -283,16 +283,41 @@ def list_workspaces() -> None:
         table.add_column("Slug", style="green")
         table.add_column("Git Branch", style="blue")
         table.add_column("Base Branch", style="dim")
-        table.add_column("Path", style="dim")
+
+        # Path column with tree icon and worktree path
+        worktree_path = Path(project.worktree_path).name  # Get just the directory name
+        table.add_column(f"Path (🌳 = {worktree_path})", style="dim")
 
         for workspace in workspaces:
+            # Calculate relative path for display
+            workspace_path = Path(workspace.path).resolve()
+            project_path = Path(project.path).resolve()
+
+            try:
+                relative_path = workspace_path.relative_to(project_path)
+                if str(relative_path) == ".":
+                    # This is the project root
+                    display_path = "⚓ /"
+                else:
+                    # Check if path starts with worktree directory
+                    path_parts = relative_path.parts
+                    if path_parts and path_parts[0] == worktree_path:
+                        # Replace worktree dir with tree icon
+                        remaining_parts = path_parts[1:]
+                        display_path = "🌳 /" + "/".join(remaining_parts) if remaining_parts else "🌳"
+                    else:
+                        display_path = str(relative_path)
+            except ValueError:
+                # Path is not relative to project (shouldn't happen normally)
+                display_path = workspace.path
+
             table.add_row(
                 str(workspace.id),
                 workspace.name,
                 workspace.slug,
                 workspace.git_branch,
                 workspace.git_origin_branch or "—",
-                workspace.path,
+                display_path,
             )
 
         console.print(table)
