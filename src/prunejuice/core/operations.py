@@ -74,6 +74,8 @@ class WorkspaceService:
         return new_workspace
 
     def list_workspaces(self) -> Optional[list[Workspace]]:
+        if self.project.id is None:
+            return None
         workspaces_data = self.db.get_workspaces_by_project_id(self.project.id)
         if workspaces_data is None:
             return None
@@ -81,8 +83,8 @@ class WorkspaceService:
 
 
 class EventProtocol(Protocol):
-    def add_event(self, action: str, status: str, workspace: Optional[Workspace] = None): ...
-    def list_events(self, workspace: Optional[Workspace] = None): ...
+    def add_event(self, action: str, status: str, workspace: Optional[Workspace] = None) -> Event: ...
+    def list_events(self, workspace: Optional[Workspace] = None) -> list[Event]: ...
 
 
 class EventService:

@@ -9,8 +9,8 @@ from slugify import slugify
 
 from prunejuice.core.database.manager import Database
 from prunejuice.core.git_ops import GitManager
-from prunejuice.core.models import Project, Workspace
-from prunejuice.core.operations import WorkspaceService
+from prunejuice.core.models import Event, Project, Workspace
+from prunejuice.core.operations import EventService, WorkspaceService
 
 app = typer.Typer()
 
@@ -157,6 +157,44 @@ def _display_project_info(project: Project, workspaces: list[Workspace]) -> None
         console.print("\nNo workspaces found", style="dim")
 
 
+def _render_events_table(events: list[Event], workspaces: list[Workspace], limit: Optional[int] = None) -> None:
+    """Render a table of events."""
+    # Create a rich table for events
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("◉", justify="center")
+    table.add_column("Workspace", style="yellow")
+    table.add_column("Action", style="cyan")
+    table.add_column("Timestamp", style="dim")
+
+    # Determine how many events to show
+    events_to_show = events[:limit] if limit else events
+
+    # Add events to the table (already ordered by timestamp DESC)
+    for event in events_to_show:
+        # Format timestamp for display
+        timestamp_str = event.timestamp.strftime("%Y-%m-%d %H:%M:%S") if event.timestamp else "N/A"
+
+        # Get workspace name if available
+        workspace_name = "—"
+        if event.workspace_id:
+            for ws in workspaces:
+                if ws.id == event.workspace_id:
+                    workspace_name = ws.name
+                    break
+
+        # Create status symbol
+        if event.status == "success":
+            status_symbol = "[green]✓[/green]"
+        elif event.status == "failed":
+            status_symbol = "[red]✗[/red]"
+        else:
+            status_symbol = "[yellow]●[/yellow]"
+
+        table.add_row(status_symbol, workspace_name, event.action, timestamp_str)
+
+    console.print(table)
+
+
 def _display_events(db: Database, project: Project, workspaces: list[Workspace]) -> None:
     """Display recent events for a project."""
     if project.id is None:
@@ -166,38 +204,7 @@ def _display_events(db: Database, project: Project, workspaces: list[Workspace])
 
     if events:
         console.print("\nRecent Events:", style="bold")
-
-        # Create a rich table for events
-        table = Table(show_header=True, header_style="bold magenta")
-        table.add_column("◉", justify="center")
-        table.add_column("Workspace", style="yellow")
-        table.add_column("Action", style="cyan")
-        table.add_column("Timestamp", style="dim")
-
-        # Add events to the table (already ordered by timestamp DESC)
-        for event in events[:10]:  # Show only the 10 most recent events
-            # Format timestamp for display
-            timestamp_str = event.timestamp.strftime("%Y-%m-%d %H:%M:%S") if event.timestamp else "N/A"
-
-            # Get workspace name if available
-            workspace_name = "—"
-            if event.workspace_id:
-                for ws in workspaces:
-                    if ws.id == event.workspace_id:
-                        workspace_name = ws.name
-                        break
-
-            # Create status symbol
-            if event.status == "success":
-                status_symbol = "[green]✓[/green]"
-            elif event.status == "failed":
-                status_symbol = "[red]✗[/red]"
-            else:
-                status_symbol = "[yellow]●[/yellow]"
-
-            table.add_row(status_symbol, workspace_name, event.action, timestamp_str)
-
-        console.print(table)
+        _render_events_table(events, workspaces, limit=10)
 
         if len(events) > 10:
             console.print(f"\n[dim]Showing 10 of {len(events)} total events[/dim]")
@@ -286,7 +293,7 @@ def list_workspaces(output_format: Optional[str] = typer.Option(None, "--format"
                     "git_branch": workspace.git_branch,
                     "git_origin_branch": workspace.git_origin_branch,
                 }
-                for workspace in workspaces
+                for workspace in (workspaces or [])
             ]
             print(json.dumps(workspace_data))
             return
@@ -344,6 +351,126 @@ def list_workspaces(output_format: Optional[str] = typer.Option(None, "--format"
 
     except Exception as e:
         console.print(f"❌ Failed to list workspaces: {e}", style="red")
+        raise typer.Exit(1) from e
+
+
+@app.command("add-event")
+def add_event(
+    action: str = typer.Argument(..., help="Action that occurred (e.g., 'build-started', 'test-completed')"),
+    status: str = typer.Argument(..., help="Status of the action (e.g., 'success', 'failure', 'pending')"),
+    workspace_id: Optional[int] = typer.Option(
+        None, "--workspace-id", help="ID of the workspace associated with the event"
+    ),
+) -> None:
+    """Add a new event to the project's event log."""
+    project_path = _get_project_path()
+    project, db = _load_project_from_db(project_path)
+
+    # Get workspace if ID is provided
+    workspace = None
+    if workspace_id:
+        if project.id is None:
+            console.print("❌ Project has no ID", style="red")
+            raise typer.Exit(1)
+        # Get all workspaces to find the one with the given ID
+        workspaces_data = db.get_workspaces_by_project_id(project.id)
+        workspaces = [Workspace(**ws_data) for ws_data in workspaces_data]
+
+        workspace = next((ws for ws in workspaces if ws.id == workspace_id), None)
+        if not workspace:
+            console.print(f"❌ Workspace with ID {workspace_id} not found in this project", style="red")
+            raise typer.Exit(1)
+
+    try:
+        event_service = EventService(db, project)
+        event = event_service.add_event(action=action, status=status, workspace=workspace)
+
+        # Display success message
+        console.print("✅ Event added successfully!", style="bold green")
+        console.print(f"ID: {event.id}")
+        console.print(f"Action: {event.action}")
+        console.print(f"Status: {event.status}")
+        if workspace:
+            console.print(f"Workspace: {workspace.name} (ID: {workspace.id})")
+
+    except Exception as e:
+        console.print(f"❌ Failed to add event: {e}", style="red")
+        raise typer.Exit(1) from e
+
+
+@app.command("list-events")
+def list_events(
+    workspace_id: Optional[int] = typer.Option(None, "--workspace-id", help="Filter events by workspace ID"),
+    limit: int = typer.Option(10, "--limit", help="Maximum number of events to display"),
+    output_format: Optional[str] = typer.Option(None, "--format", help="Output format (json)"),
+) -> None:
+    """List events for the current project."""
+    project_path = _get_project_path()
+    project, db = _load_project_from_db(project_path)
+
+    # Get workspace if ID is provided for filtering
+    workspace = None
+    workspace_name = None
+    if workspace_id:
+        if project.id is None:
+            console.print("❌ Project has no ID", style="red")
+            raise typer.Exit(1)
+        # Get all workspaces to find the one with the given ID
+        workspaces_data = db.get_workspaces_by_project_id(project.id)
+        workspaces = [Workspace(**ws_data) for ws_data in workspaces_data]
+
+        workspace = next((ws for ws in workspaces if ws.id == workspace_id), None)
+        if not workspace:
+            console.print(f"❌ Workspace with ID {workspace_id} not found in this project", style="red")
+            raise typer.Exit(1)
+        workspace_name = workspace.name
+
+    try:
+        event_service = EventService(db, project)
+        events = event_service.list_events(workspace=workspace)
+
+        # Handle JSON format
+        if output_format == "json":
+            event_data = [
+                {
+                    "id": event.id,
+                    "action": event.action,
+                    "status": event.status,
+                    "project_id": event.project_id,
+                    "workspace_id": event.workspace_id,
+                    "timestamp": event.timestamp.isoformat() if event.timestamp else None,
+                }
+                for event in events[:limit]
+            ]
+            print(json.dumps(event_data))
+            return
+
+        # Display header
+        if workspace_name:
+            console.print(f"📋 Events for workspace [bold]{workspace_name}[/bold]:", style="bold blue")
+        else:
+            console.print(f"📋 Events for project [bold]{project.name}[/bold]:", style="bold blue")
+
+        if not events:
+            console.print("No events found", style="dim")
+            return
+
+        # Get all workspaces for name resolution
+        if project.id is None:
+            console.print("❌ Project has no ID", style="red")
+            raise typer.Exit(1)
+        workspaces_data = db.get_workspaces_by_project_id(project.id)
+        workspaces = [Workspace(**ws_data) for ws_data in workspaces_data]
+
+        # Display the events table using the helper
+        console.print("\nRecent Events:", style="bold")
+        _render_events_table(events, workspaces, limit=limit)
+
+        if len(events) > limit:
+            console.print(f"\n[dim]Showing {limit} of {len(events)} total events (use --limit to see more)[/dim]")
+
+    except Exception as e:
+        console.print(f"❌ Failed to list events: {e}", style="red")
         raise typer.Exit(1) from e
 
 

@@ -1056,3 +1056,295 @@ def test_list_workspaces_command_service_error(runner, temp_dir, monkeypatch):
 
     finally:
         os.chdir(original_cwd)
+
+
+def test_add_event_command_without_workspace(runner, temp_dir):
+    """Test add-event command without workspace association."""
+    import os
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Initialize project
+        init_result = runner.invoke(app, ["init", "Test Project"])
+        assert init_result.exit_code == 0
+
+        # Add event without workspace
+        result = runner.invoke(app, ["add-event", "build-started", "pending"])
+
+        assert result.exit_code == 0
+        assert "✅ Event added successfully!" in result.stdout
+        assert "ID:" in result.stdout
+        assert "Action: build-started" in result.stdout
+        assert "Status: pending" in result.stdout
+        assert "Workspace:" not in result.stdout
+
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_add_event_command_with_workspace(runner, temp_dir):
+    """Test add-event command with workspace association."""
+    import os
+
+    from git import Repo
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Initialize git repo
+        repo = Repo.init(temp_dir)
+        test_file = temp_dir / "README.md"
+        test_file.write_text("# Test")
+        repo.index.add(["README.md"])
+        repo.index.commit("Initial commit")
+
+        # Initialize project (creates main workspace)
+        init_result = runner.invoke(app, ["init", "Test Project"])
+        assert init_result.exit_code == 0
+
+        # Add event with workspace ID 1 (main workspace)
+        result = runner.invoke(app, ["add-event", "test-completed", "success", "--workspace-id", "1"])
+
+        assert result.exit_code == 0
+        assert "✅ Event added successfully!" in result.stdout
+        assert "Action: test-completed" in result.stdout
+        assert "Status: success" in result.stdout
+        assert "Workspace: main (ID: 1)" in result.stdout
+
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_add_event_command_invalid_workspace(runner, temp_dir):
+    """Test add-event command with invalid workspace ID."""
+    import os
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Initialize project
+        init_result = runner.invoke(app, ["init", "Test Project"])
+        assert init_result.exit_code == 0
+
+        # Try to add event with non-existent workspace ID
+        result = runner.invoke(app, ["add-event", "test-run", "failed", "--workspace-id", "999"])
+
+        assert result.exit_code == 1
+        assert "❌ Workspace with ID 999 not found in this project" in result.stdout
+
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_list_events_command_all_events(runner, temp_dir):
+    """Test list-events command showing all project events."""
+    import os
+
+    from git import Repo
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Initialize git repo
+        repo = Repo.init(temp_dir)
+        test_file = temp_dir / "README.md"
+        test_file.write_text("# Test")
+        repo.index.add(["README.md"])
+        repo.index.commit("Initial commit")
+
+        # Initialize project
+        init_result = runner.invoke(app, ["init", "Test Project"])
+        assert init_result.exit_code == 0
+
+        # Add some events
+        runner.invoke(app, ["add-event", "build-started", "pending"])
+        runner.invoke(app, ["add-event", "build-completed", "success", "--workspace-id", "1"])
+        runner.invoke(app, ["add-event", "deploy-started", "pending"])
+
+        # List all events
+        result = runner.invoke(app, ["list-events"])
+
+        assert result.exit_code == 0
+        assert "📋 Events for project Test Project:" in result.stdout
+        assert "Recent Events:" in result.stdout
+        assert "deploy-started" in result.stdout
+        assert "build-completed" in result.stdout
+        assert "build-started" in result.stdout
+        # Should also show the init events
+        assert "workspace-created" in result.stdout
+        assert "project-initialized" in result.stdout
+
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_list_events_command_filtered_by_workspace(runner, temp_dir):
+    """Test list-events command filtered by workspace."""
+    import os
+
+    from git import Repo
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Initialize git repo
+        repo = Repo.init(temp_dir)
+        test_file = temp_dir / "README.md"
+        test_file.write_text("# Test")
+        repo.index.add(["README.md"])
+        repo.index.commit("Initial commit")
+
+        # Initialize project
+        init_result = runner.invoke(app, ["init", "Test Project"])
+        assert init_result.exit_code == 0
+
+        # Add events - some with workspace, some without
+        runner.invoke(app, ["add-event", "project-config", "success"])  # No workspace
+        runner.invoke(app, ["add-event", "test-started", "pending", "--workspace-id", "1"])
+        runner.invoke(app, ["add-event", "test-completed", "success", "--workspace-id", "1"])
+        runner.invoke(app, ["add-event", "global-cleanup", "success"])  # No workspace
+
+        # List events for workspace 1
+        result = runner.invoke(app, ["list-events", "--workspace-id", "1"])
+
+        assert result.exit_code == 0
+        assert "📋 Events for workspace main:" in result.stdout
+        assert "test-completed" in result.stdout
+        assert "test-started" in result.stdout
+        assert "workspace-created" in result.stdout  # Init event for workspace
+        # Should NOT include project-level events
+        assert "project-config" not in result.stdout
+        assert "global-cleanup" not in result.stdout
+        assert "project-initialized" not in result.stdout
+
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_list_events_command_with_limit(runner, temp_dir):
+    """Test list-events command with limit option."""
+    import os
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Initialize project
+        init_result = runner.invoke(app, ["init", "Test Project"])
+        assert init_result.exit_code == 0
+
+        # Add many events
+        for i in range(15):
+            runner.invoke(app, ["add-event", f"event-{i}", "success"])
+
+        # List with default limit (10)
+        result = runner.invoke(app, ["list-events"])
+        assert result.exit_code == 0
+        assert "Showing 10 of" in result.stdout
+
+        # List with custom limit
+        result = runner.invoke(app, ["list-events", "--limit", "5"])
+        assert result.exit_code == 0
+        # Should see the 5 most recent events
+        assert "event-14" in result.stdout
+        assert "event-13" in result.stdout
+        assert "event-12" in result.stdout
+        assert "event-11" in result.stdout
+        assert "event-10" in result.stdout
+        assert "event-9" not in result.stdout
+        assert "Showing 5 of" in result.stdout
+
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_list_events_command_json_format(runner, temp_dir):
+    """Test list-events command with JSON output format."""
+    import json
+    import os
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Initialize project
+        init_result = runner.invoke(app, ["init", "Test Project"])
+        assert init_result.exit_code == 0
+
+        # Add an event
+        runner.invoke(app, ["add-event", "test-event", "success"])
+
+        # List events in JSON format
+        result = runner.invoke(app, ["list-events", "--format", "json", "--limit", "1"])
+
+        assert result.exit_code == 0
+        # Parse JSON output
+        data = json.loads(result.stdout)
+        assert isinstance(data, list)
+        assert len(data) == 1
+        event = data[0]
+        assert event["action"] == "test-event"
+        assert event["status"] == "success"
+        assert "id" in event
+        assert "project_id" in event
+        assert "timestamp" in event
+
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_list_events_command_no_events(runner, temp_dir):
+    """Test list-events command when no events exist (edge case)."""
+    import os
+    import sqlite3
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Initialize project
+        init_result = runner.invoke(app, ["init", "Test Project"])
+        assert init_result.exit_code == 0
+
+        # Clear all events from database (edge case testing)
+        db_path = temp_dir / ".prj" / "prunejuice.db"
+        with sqlite3.connect(db_path) as conn:
+            conn.execute("DELETE FROM event_log")
+            conn.commit()
+
+        # List events
+        result = runner.invoke(app, ["list-events"])
+
+        assert result.exit_code == 0
+        assert "No events found" in result.stdout
+
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_list_events_command_invalid_workspace(runner, temp_dir):
+    """Test list-events command with invalid workspace ID."""
+    import os
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+
+        # Initialize project
+        init_result = runner.invoke(app, ["init", "Test Project"])
+        assert init_result.exit_code == 0
+
+        # Try to list events for non-existent workspace
+        result = runner.invoke(app, ["list-events", "--workspace-id", "999"])
+
+        assert result.exit_code == 1
+        assert "❌ Workspace with ID 999 not found in this project" in result.stdout
+
+    finally:
+        os.chdir(original_cwd)
