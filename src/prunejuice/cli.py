@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from typing import Optional
 
@@ -259,7 +260,7 @@ def create_workspace(
 
 
 @app.command("list-workspaces")
-def list_workspaces() -> None:
+def list_workspaces(output_format: Optional[str] = typer.Option(None, "--format", help="Output format (json)")) -> None:
     """List all workspaces in the current project."""
     project_path = _get_project_path()
     project, db = _load_project_from_db(project_path)
@@ -267,10 +268,28 @@ def list_workspaces() -> None:
     git_manager = GitManager(Path(project.path))
     workspace_service = WorkspaceService(db, git_manager, project)
 
-    console.print(f"📋 Workspaces for [bold]{project.name}[/bold]:", style="bold blue")
+    # Print header for regular format before try block
+    if output_format != "json":
+        console.print(f"📋 Workspaces for [bold]{project.name}[/bold]:", style="bold blue")
 
     try:
         workspaces = workspace_service.list_workspaces()
+
+        # Handle JSON format
+        if output_format == "json":
+            workspace_data = [
+                {
+                    "id": workspace.id,
+                    "name": workspace.name,
+                    "slug": workspace.slug,
+                    "path": workspace.path,
+                    "git_branch": workspace.git_branch,
+                    "git_origin_branch": workspace.git_origin_branch,
+                }
+                for workspace in workspaces
+            ]
+            print(json.dumps(workspace_data))
+            return
 
         if not workspaces:
             console.print("No workspaces found", style="dim")
