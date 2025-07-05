@@ -192,3 +192,28 @@ class Database:
                 )
                 for row in rows
             ]
+
+    def get_events_by_workspace_id(self, workspace_id: int) -> list[Event]:
+        """Get all events for a specific workspace, ordered by timestamp DESC (most recent first)."""
+        with self.connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT id, action, project_id, workspace_id, timestamp, status
+                FROM event_log
+                WHERE workspace_id = ?
+                ORDER BY timestamp DESC
+                """,
+                (workspace_id,),
+            )
+            rows = cursor.fetchall()
+            return [
+                Event(
+                    id=row[0],
+                    action=row[1],
+                    project_id=row[2],
+                    workspace_id=row[3],
+                    timestamp=row[4],
+                    status=row[5],
+                )
+                for row in rows
+            ]

@@ -5,8 +5,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from prunejuice.core.models import Project, Workspace
-from prunejuice.core.operations import WorkspaceService
+from prunejuice.core.models import Event, Project, Workspace
+from prunejuice.core.operations import EventService, WorkspaceService
 
 
 @pytest.fixture
@@ -181,3 +181,164 @@ def test_list_workspaces_returns_none(workspace_service, mock_database, mock_pro
     # Assert
     assert result is None
     mock_database.get_workspaces_by_project_id.assert_called_once_with(mock_project.id)
+
+
+@pytest.fixture
+def event_service(mock_database, mock_project):
+    """EventService instance with mocked dependencies."""
+    return EventService(db=mock_database, project=mock_project)
+
+
+@pytest.fixture
+def mock_workspace():
+    """Mock Workspace instance."""
+    return Workspace(
+        id=42,
+        name="Test Workspace",
+        slug="test-workspace",
+        project_id=1,
+        path="/tmp/test_workspace",
+        git_branch="test-branch",
+        git_origin_branch="main",
+        artifacts_path="/tmp/artifacts/test-workspace",
+    )
+
+
+def test_event_service_add_event_without_workspace(event_service, mock_database, mock_project):
+    """Test adding an event without workspace association."""
+    mock_database.insert_event.return_value = 999
+
+    result = event_service.add_event(action="project-initialized", status="success")
+
+    assert isinstance(result, Event)
+    assert result.id == 999
+    assert result.action == "project-initialized"
+    assert result.status == "success"
+    assert result.project_id == 1
+    assert result.workspace_id is None
+
+    mock_database.insert_event.assert_called_once_with(
+        action="project-initialized", project_id=1, workspace_id=None, status="success"
+    )
+
+
+def test_event_service_add_event_with_workspace(event_service, mock_database, mock_project, mock_workspace):
+    """Test adding an event with workspace association."""
+    mock_database.insert_event.return_value = 1000
+
+    result = event_service.add_event(action="build-started", status="pending", workspace=mock_workspace)
+
+    assert isinstance(result, Event)
+    assert result.id == 1000
+    assert result.action == "build-started"
+    assert result.status == "pending"
+    assert result.project_id == 1
+    assert result.workspace_id == 42
+
+    mock_database.insert_event.assert_called_once_with(
+        action="build-started", project_id=1, workspace_id=42, status="pending"
+    )
+
+
+def test_event_service_add_event_project_id_not_set(mock_database):
+    """Test adding event when project ID is not set raises ValueError."""
+    project_without_id = Project(name="Test", slug="test", path="/tmp/test", worktree_path="/tmp/test_worktrees")
+    service = EventService(db=mock_database, project=project_without_id)
+
+    with pytest.raises(ValueError, match="Project ID is not set"):
+        service.add_event(action="test", status="success")
+
+
+def test_event_service_list_events_all_project_events(event_service, mock_database, mock_project):
+    """Test listing all events for a project."""
+    mock_events = [
+        Event(id=1, action="project-initialized", project_id=1, status="success"),
+        Event(id=2, action="workspace-created", project_id=1, workspace_id=10, status="success"),
+        Event(id=3, action="build-started", project_id=1, workspace_id=11, status="pending"),
+    ]
+    mock_database.get_events_by_project_id.return_value = mock_events
+
+    result = event_service.list_events()
+
+    assert result == mock_events
+    assert len(result) == 3
+    mock_database.get_events_by_project_id.assert_called_once_with(1)
+
+
+def test_event_service_list_events_by_workspace(event_service, mock_database, mock_workspace):
+    """Test listing events filtered by workspace."""
+    mock_events = [
+        Event(id=10, action="workspace-created", project_id=1, workspace_id=42, status="success"),
+        Event(id=11, action="build-started", project_id=1, workspace_id=42, status="pending"),
+        Event(id=12, action="build-completed", project_id=1, workspace_id=42, status="success"),
+    ]
+    mock_database.get_events_by_workspace_id.return_value = mock_events
+
+    result = event_service.list_events(workspace=mock_workspace)
+
+    assert result == mock_events
+    assert len(result) == 3
+    assert all(e.workspace_id == 42 for e in result)
+    mock_database.get_events_by_workspace_id.assert_called_once_with(42)
+
+
+def test_event_service_list_events_workspace_without_id(event_service, mock_database):
+    """Test listing events with workspace that has no ID raises ValueError."""
+    workspace_without_id = Workspace(
+        name="Test", slug="test", project_id=1, path="/tmp/test", git_branch="test", git_origin_branch="main"
+    )
+
+    with pytest.raises(ValueError, match="Workspace ID is not set"):
+        event_service.list_events(workspace=workspace_without_id)
+
+
+def test_event_service_list_events_project_id_not_set(mock_database):
+    """Test listing events when project ID is not set raises ValueError."""
+    project_without_id = Project(name="Test", slug="test", path="/tmp/test", worktree_path="/tmp/test_worktrees")
+    service = EventService(db=mock_database, project=project_without_id)
+
+    with pytest.raises(ValueError, match="Project ID is not set"):
+        service.list_events()
+
+
+def test_event_service_list_events_empty_list(event_service, mock_database):
+    """Test listing events when no events exist returns empty list."""
+    mock_database.get_events_by_project_id.return_value = []
+
+    result = event_service.list_events()
+
+    assert result == []
+    mock_database.get_events_by_project_id.assert_called_once()
+
+
+def test_event_service_add_event_different_statuses(event_service, mock_database):
+    """Test adding events with different status values."""
+    statuses = ["success", "failure", "pending", "warning", "error"]
+    mock_database.insert_event.side_effect = range(100, 105)
+
+    for i, status in enumerate(statuses):
+        result = event_service.add_event(action=f"test-{status}", status=status)
+        assert result.status == status
+        assert result.id == 100 + i
+
+
+def test_event_service_add_event_various_actions(event_service, mock_database, mock_workspace):
+    """Test adding events with various action types."""
+    actions = [
+        "workspace-created",
+        "workspace-deleted",
+        "build-started",
+        "build-completed",
+        "test-started",
+        "test-completed",
+        "deploy-initiated",
+        "deploy-completed",
+    ]
+    mock_database.insert_event.side_effect = range(200, 208)
+
+    for i, action in enumerate(actions):
+        result = event_service.add_event(
+            action=action, status="success", workspace=mock_workspace if "workspace" in action or i % 2 == 0 else None
+        )
+        assert result.action == action
+        assert result.id == 200 + i

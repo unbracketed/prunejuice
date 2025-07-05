@@ -440,3 +440,77 @@ def test_get_events_by_project_id_nonexistent(temp_db):
     """Test retrieving events for a nonexistent project."""
     events = temp_db.get_events_by_project_id(999)
     assert events == []
+
+
+def test_get_events_by_workspace_id(temp_db):
+    """Test getting events for a specific workspace."""
+    # Insert project and workspaces
+    project_id = temp_db.insert_project(
+        name="Test Project", slug="test-project", path="/test/project", worktree_path="/test/worktrees"
+    )
+
+    workspace1_id = temp_db.insert_workspace(
+        name="Workspace 1",
+        slug="workspace-1",
+        project_id=project_id,
+        path="/test/workspace1",
+        git_branch="feature1",
+        git_origin_branch="main",
+    )
+
+    workspace2_id = temp_db.insert_workspace(
+        name="Workspace 2",
+        slug="workspace-2",
+        project_id=project_id,
+        path="/test/workspace2",
+        git_branch="feature2",
+        git_origin_branch="main",
+    )
+
+    # Insert events for different workspaces with timestamps
+    temp_db.insert_event("workspace-created", project_id, "success", workspace1_id, "2024-01-01 10:00:00")
+    temp_db.insert_event("build-started", project_id, "pending", workspace1_id, "2024-01-01 10:01:00")
+    temp_db.insert_event("workspace-created", project_id, "success", workspace2_id, "2024-01-01 10:02:00")
+    temp_db.insert_event("test-run", project_id, "success", workspace1_id, "2024-01-01 10:03:00")
+    temp_db.insert_event("deploy-started", project_id, "pending", workspace2_id, "2024-01-01 10:04:00")
+
+    # Get events for workspace 1
+    events_ws1 = temp_db.get_events_by_workspace_id(workspace1_id)
+    assert len(events_ws1) == 3
+    assert all(e.workspace_id == workspace1_id for e in events_ws1)
+    # Should be ordered by timestamp DESC
+    assert [e.action for e in events_ws1] == ["test-run", "build-started", "workspace-created"]
+
+    # Get events for workspace 2
+    events_ws2 = temp_db.get_events_by_workspace_id(workspace2_id)
+    assert len(events_ws2) == 2
+    assert all(e.workspace_id == workspace2_id for e in events_ws2)
+    # Should be ordered by timestamp DESC
+    assert [e.action for e in events_ws2] == ["deploy-started", "workspace-created"]
+
+
+def test_get_events_by_workspace_id_empty(temp_db):
+    """Test getting events for workspace with no events returns empty list."""
+    # Insert project and workspace
+    project_id = temp_db.insert_project(
+        name="Test Project", slug="test-project", path="/test/project", worktree_path="/test/worktrees"
+    )
+
+    workspace_id = temp_db.insert_workspace(
+        name="Empty Workspace",
+        slug="empty-workspace",
+        project_id=project_id,
+        path="/test/empty",
+        git_branch="empty",
+        git_origin_branch="main",
+    )
+
+    # Get events for workspace with no events
+    events = temp_db.get_events_by_workspace_id(workspace_id)
+    assert events == []
+
+
+def test_get_events_by_workspace_id_nonexistent(temp_db):
+    """Test getting events for non-existent workspace returns empty list."""
+    events = temp_db.get_events_by_workspace_id(999)
+    assert events == []

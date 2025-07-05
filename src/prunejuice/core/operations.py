@@ -6,14 +6,14 @@ from slugify import slugify
 
 from prunejuice.core.database.manager import Database
 from prunejuice.core.git_ops import GitManager
-from prunejuice.core.models import Project, Workspace
+from prunejuice.core.models import Event, Project, Workspace
 
 logger = getLogger(__name__)
 
 
 class WorkspaceProtocol(Protocol):
     def create_workspace(
-        self, name: str, branch_name: Optional[str], base_branch: Optional[str] = None
+        self, name: str, branch_name: Optional[str] = None, base_branch: Optional[str] = None
     ) -> Workspace: ...
     def list_workspaces(self) -> Optional[list[Workspace]]: ...
 
@@ -25,7 +25,7 @@ class WorkspaceService:
         self.project = project
 
     def create_workspace(
-        self, name: str, branch_name: Optional[str], base_branch: Optional[str] = None
+        self, name: str, branch_name: Optional[str] = None, base_branch: Optional[str] = None
     ) -> Optional[Workspace]:
         workspace_slug = slugify(name)
 
@@ -78,3 +78,57 @@ class WorkspaceService:
         if workspaces_data is None:
             return None
         return [Workspace(**workspace_data) for workspace_data in workspaces_data]
+
+
+class EventProtocol(Protocol):
+    def add_event(self, action: str, status: str, workspace: Optional[Workspace] = None): ...
+    def list_events(self, workspace: Optional[Workspace] = None): ...
+
+
+class EventService:
+    def __init__(self, db: Database, project: Project):
+        self.db = db
+        self.project = project
+
+    def add_event(self, action: str, status: str, workspace: Optional[Workspace] = None) -> Event:
+        """Add a new event to the event log.
+
+        Args:
+            action: The action that occurred (e.g., 'workspace-created', 'build-started')
+            status: The status of the action (e.g., 'success', 'failure', 'pending')
+            workspace: Optional workspace associated with the event
+
+        Returns:
+            The created Event object
+        """
+        if self.project.id is None:
+            raise ValueError("Project ID is not set")
+
+        workspace_id = workspace.id if workspace else None
+
+        event_id = self.db.insert_event(
+            action=action, project_id=self.project.id, workspace_id=workspace_id, status=status
+        )
+
+        return Event(id=event_id, action=action, project_id=self.project.id, workspace_id=workspace_id, status=status)
+
+    def list_events(self, workspace: Optional[Workspace] = None) -> list[Event]:
+        """List events for the project, optionally filtered by workspace.
+
+        Args:
+            workspace: Optional workspace to filter events by
+
+        Returns:
+            List of Event objects, ordered by timestamp DESC (most recent first)
+        """
+        if self.project.id is None:
+            raise ValueError("Project ID is not set")
+
+        if workspace:
+            if workspace.id is None:
+                raise ValueError("Workspace ID is not set")
+            # Get events for specific workspace
+            return self.db.get_events_by_workspace_id(workspace.id)
+        else:
+            # Get all events for the project
+            return self.db.get_events_by_project_id(self.project.id)
