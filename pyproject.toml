@@ -66,8 +66,13 @@ show_error_codes = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 filterwarnings = [
     "ignore::ResourceWarning:configparser",
+]
+markers = [
+    "integration: marks tests as integration tests (requires external dependencies)",
+    "tmux: marks tests as requiring tmux to be installed",
 ]
 
 [tool.ruff]
@@ -113,9 +118,14 @@ ignore = [
     "E501",
     # DoNotAssignLambda
     "E731",
+    # `subprocess` call: check for execution of untrusted input
+    "S603",
+    # Starting a process with a partial executable path
+    "S607",
     "TRY003",
     "TRY002",
     "TRY301"
+
 ]
 
 [tool.ruff.lint.per-file-ignores]
